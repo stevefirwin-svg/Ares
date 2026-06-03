@@ -1,0 +1,72 @@
+{
+  "_schema": {
+    "version": "1.0",
+    "description": "Per-engine signal weights. Bootstrap equal weights until IC_CALIBRATION_GATE (30 trades per engine). Updated by statistical_validation.py.",
+    "fields": {
+      "signal_weights": "Normalized signal weights summing to 1.0. Equal weights = bootstrap. IC-weighted = calibrated.",
+      "last_updated": "ISO timestamp of last calibration run",
+      "calibrated": "true = IC-weighted weights; false = equal weight bootstrap",
+      "n_trades": "Number of purged (non-overlapping) trades used in calibration",
+      "fdr_alpha": "BH FDR level used (0.10 = 10%)"
+    }
+  },
+  "A": {
+    "signal_weights": {
+      "a_mom_12_1":       0.333333,
+      "a_hi52_proximity": 0.333333,
+      "a_roc_accel":      0.333334
+    },
+    "last_updated": "2026-05-30T00:00:00",
+    "calibrated": false,
+    "n_trades": 0,
+    "fdr_alpha": 0.10
+  },
+  "B": {
+    "signal_weights": {
+      "b_avwap_distance":   0.333333,
+      "b_stoch_divergence": 0.333333,
+      "b_volume_climax":    0.333334
+    },
+    "last_updated": "2026-05-30T00:00:00",
+    "calibrated": false,
+    "n_trades": 0,
+    "fdr_alpha": 0.10
+  },
+  "C": {
+    "signal_weights": {
+      "c_squeeze_duration":    0.333333,
+      "c_hv_ratio":            0.333333,
+      "c_momentum_direction":  0.333334
+    },
+    "last_updated": "2026-05-30T00:00:00",
+    "calibrated": false,
+    "n_trades": 0,
+    "fdr_alpha": 0.10
+  },
+  "E": {
+    "signal_weights": {
+      "e_rs_20d":          0.200000,
+      "e_rs_60d":          0.200000,
+      "e_sector_rs_spy":   0.200000,
+      "e_rs_acceleration": 0.200000,
+      "e_new_rs_high":     0.200000
+    },
+    "last_updated": "2026-05-30T00:00:00",
+    "calibrated": false,
+    "n_trades": 0,
+    "fdr_alpha": 0.10
+  },
+  "F": {
+    "signal_weights": {
+      "f_consol_quality":      0.200000,
+      "f_breakout_strength":   0.200000,
+      "f_overhead_clearance":  0.200000,
+      "f_vol_declining":       0.200000,
+      "f_rel_strength_spy":    0.200000
+    },
+    "last_updated": "2026-05-30T00:00:00",
+    "calibrated": false,
+    "n_trades": 0,
+    "fdr_alpha": 0.10
+  }
+}

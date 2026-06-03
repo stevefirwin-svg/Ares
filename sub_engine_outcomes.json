@@ -1,0 +1,23 @@
+{
+  "_schema": {
+    "description": "Ares per-engine outcome log. One record per closed trade.",
+    "fields": {
+      "trade_id":         "UUID — {engine_id}-{symbol}-{entry_date}",
+      "engine_id":        "A|B|C|D|E|F",
+      "symbol":           "Ticker",
+      "entry_date":       "YYYY-MM-DD",
+      "exit_date":        "YYYY-MM-DD",
+      "entry_price":      "float",
+      "exit_price":       "float",
+      "shares":           "int",
+      "pnl":              "float — realized P&L in dollars",
+      "pnl_pct":          "float — percentage (e.g. 5.2 = 5.2%)",
+      "exit_reason":      "string — trail_stop|time_stop|hard_stop|target|manual",
+      "macro_regime":     "RISK_ON|NEUTRAL|RISK_OFF|CRISIS — regime at entry",
+      "signals_at_entry": "dict — engine-specific signals logged at entry",
+      "forward_return_Nd": "float|null — N-day return anchored at entry_date+N from entry_price (N from IC_HORIZON_DAYS). Never exit-anchored.",
+      "ic_valid":         "bool — true if this trade counts toward IC calibration (terminal exit, full position)"
+    }
+  },
+  "trades": []
+}
