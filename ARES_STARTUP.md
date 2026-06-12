@@ -1,7 +1,7 @@
 # ARES\_STARTUP.md — Session Startup
 
 *Read first. Every session. No exceptions.
-Last updated: 2026-05-31 | Version: 1.2*
+Last updated: 2026-06-03 | Version: 1.3*
 
 ---
 
@@ -37,33 +37,41 @@ the naming confusion permanently.
 
 ---
 
-## STEP 1 — COPY LATEST FILES INTO ARES FOLDER
+## ⚠️  SECURITY WARNING — PUBLIC REPOSITORY
 
-Until git is initialized, copy all session output files directly into:
-`C:\Users\steve\OneDrive\Desktop\Ares`
+The Ares GitHub repo (https://github.com/stevefirwin-svg/Ares) is **public**.
 
-Git setup (run once when ready):
+**NEVER commit the following files:**
+- `_env` — contains Alpaca API keys
+- `.env` — same
+- `*.log` — runtime logs
+- `__pycache__/` — bytecode
+
+These are excluded in `.gitignore`. Before every `git push`, run:
+```powershell
+git status --short
+```
+Confirm none of the above appear. If they do, run `git rm --cached <filename>`
+before pushing.
+
+**If API keys are ever accidentally pushed: immediately rotate them in the
+Alpaca dashboard before doing anything else.**
+
+---
+
+## STEP 1 — PULL LATEST FROM GITHUB
+
 ```powershell
 cd "C:\Users\steve\OneDrive\Desktop\Ares"
-git init
-git add -A
-git commit -m "Initial commit: Sprints 0-3 complete (2026-05-30)"
-git branch -M main
-git remote add origin https://github.com/stevefirwin-svg/Ares.git
-git push -u origin main
-```
-
-Once git is live, replace Step 1 with:
-```powershell
-git -C "C:\Users\steve\OneDrive\Desktop\Ares" pull origin main
-git -C "C:\Users\steve\OneDrive\Desktop\Ares" log --oneline -3
+git pull origin main
+git log --oneline -3
 Remove-Item -Recurse -Force __pycache__ -ErrorAction SilentlyContinue
 ```
 
-**Note the top commit hash.** Paste it to Claude at session start.
-Claude uses it as `LAST_STEVE_COMMIT` when generating the end-of-session patch.
+**Note the top commit hash** and paste it to Claude at session start.
+Claude uses it as `LAST_COMMIT` to know exactly what state the codebase is in.
 
-\---
+---
 
 ## STEP 2 — READ FILES IN ORDER
 
@@ -71,7 +79,7 @@ Claude uses it as `LAST_STEVE_COMMIT` when generating the end-of-session patch.
 2. **ARES\_MASTER\_PLAN.md** — what is done, what is open, build order
 3. **ARES\_SKILL.md** — rules, engine architecture, what must never be violated
 
-\---
+---
 
 ## STEP 3 — HEALTH CHECK
 
@@ -94,7 +102,7 @@ python ares_exit_monitor.py --status
 - Any open positions across all engines
 - Confirm engine modes match expected (shadow vs live)
 
-\---
+---
 
 ## STEP 4 — VERIFY CRITICAL INVARIANTS
 
@@ -126,7 +134,7 @@ grep -n "entry_date_str\|entry_price\|fwd_price / entry_price" outcome_tracker.p
 
 If any check fails: diagnose before writing code.
 
-\---
+---
 
 ## STEP 5 — CONTEXT CHECK
 
@@ -137,7 +145,7 @@ If any check fails: diagnose before writing code.
 5. What shadow counts have accumulated? Check `shadow_classifications.json`.
 6. What is today's build target? See ARES\_MASTER\_PLAN.md open items.
 
-\---
+---
 
 ## DAILY SCHEDULE (target — not yet fully operational)
 
@@ -157,68 +165,67 @@ If any check fails: diagnose before writing code.
 |After close|outcome\_tracker.py|Tag new closed trades|
 |After close|capital\_allocator.py --report|Advisory reallocation check|
 
-**✅ Task Scheduler fully configured (session 6 — 2026-06-03):**
+**Task Scheduler items not yet added (session 4 end):**
+- engine\_a.py --scan at 9:35 AM
+- engine\_f.py --scan at 9:35 AM
+- engine\_e.py --scan at 9:35 AM
+- engine\_c.py --scan at 9:35 AM
+- ares\_hold\_monitor.py at 9:52 AM and 4:00 PM
+- daily\_recap.py at 4:15 PM
 
-| Task | Time | Status |
-|------|------|--------|
-| Ares\_Hamilton | 8:00 AM | ✅ Running |
-| Ares\_UniverseRebuild | 8:30 AM | ✅ Running |
-| EngineB\_Scan | 9:35 AM | ✅ Running |
-| EngineA\_Scan | 9:36 AM | ✅ Running |
-| EngineC\_Scan | 9:37 AM | ✅ Running |
-| EngineE\_Scan | 9:38 AM | ✅ Running |
-| EngineF\_Scan | 9:38 AM | ✅ Running |
-| HoldMonitor\_AM | 9:52 AM | ✅ Running |
-| HoldMonitor\_PM | 4:00 PM | ✅ Running |
-| Ares\_DailyRecap | 4:15 PM | ✅ Running |
-| Ares\_OutcomeTracker\_AllForward | 4:15 PM | ✅ Running |
-
-All tasks set to "Run only when user is logged on".
+**⚠️ TODO — Fix new Ares task permissions before next market open:**
+New tasks (EngineA, C, E, F, HoldMonitor AM/PM, DailyRecap) were created in the `\Ares\`
+folder but need their run-as setting fixed or they won't fire correctly.
+1. Open Task Scheduler → expand the Ares folder
+2. For each new task → Properties → General tab
+3. Select **"Run only when user is logged on"** (not "Run whether user is logged on or not")
+4. While there: Triggers tab → verify times are 09:36, 09:37, 09:38, 09:52, 16:00, 16:15
+5. Match the config to the existing working tasks (Ares\_EngineB\_Scan, Ares\_Hamilton)
 
 Engine D (when built — separate intraday runtime):
 | 9:05 AM | engine\_d.py --premarket | Gap detection scan |
 | 9:30–11:30 AM | engine\_d.py --monitor | 5-minute intraday loop |
 
-\---
+---
 
-## SYSTEM STATE (2026-06-03 — Session 6 end)
+## SYSTEM STATE (2026-05-30 — Session 5 end)
 
 ### Built and running
 
 |File|Status|Notes|
 |-|-|-|
-|ares\_config.py|✅ LIVE|All engines set to `live`; bootstrap Kelly active|
+|ares\_config.py|✓ Done|All Ares constants|
 |ledger.py|✓ Done|engine\_id keyed + update\_metadata added|
 |hamilton\_filter.py|✓ Done|HMM live, writes macro\_context.json|
 |macro\_context.py|✓ Done|FRED stripped|
 |margin\_guard.py|✓ Done|Per-engine budget|
-|outcome\_tracker.py|✓ Done|RF-1/12/15 fixed; --all-forward scheduled at 4:15 PM|
-|capital\_allocator.py|✓ Done|Advisory — activates at 15+ closed trades/engine|
-|daily\_recap.py|✅ Scheduled|4:15 PM ET via Task Scheduler (session 6)|
-|evt\_calibrator.py|✓ Done|Fallback active — re-run after 30+ closed trades (RF-7)|
+|outcome\_tracker.py|✓ Done|RF-1 fixed: forward return anchored at entry+N|
+|capital\_allocator.py|✓ Done|Advisory — not yet scheduled|
+|daily\_recap.py|✓ Done|Not yet scheduled|
+|evt\_calibrator.py|✓ Done|Fallback active — re-run to fix RF-7|
 |ares\_universe.py|✓ Done|150 symbols, 23h cache|
-|engine\_b.py|✅ LIVE|Accumulating closed trades|
+|engine\_b.py|✓ Shadow|0/30 classifications|
 |exit\_monitor\_b.py|✓ Done|5 exit conditions|
 |hold\_monitor\_b.py|✓ Done|5-layer OU health|
-|engine\_a.py|✅ LIVE|Accumulating closed trades|
-|exit\_monitor\_a.py|✓ Done|6 exit conditions|
-|hold\_monitor\_a.py|✓ Done|5 layers + ADX slope penalty|
-|engine\_f.py|✅ LIVE|Accumulating closed trades|
-|exit\_monitor\_f.py|✓ Done|5 exits + partial trim|
-|hold\_monitor\_f.py|✓ Done|5-layer breakout health|
-|engine\_c.py|✅ LIVE|Accumulating closed trades|
-|exit\_monitor\_c.py|✓ Done|4 exit conditions|
-|hold\_monitor\_c.py|✓ Done|4-layer squeeze health|
-|engine\_e.py|✅ LIVE|Accumulating closed trades|
-|exit\_monitor\_e.py|✓ Done|RS exit conditions|
-|hold\_monitor\_e.py|✓ Done|RS health scoring|
-|ares\_exit\_monitor.py|✓ Done|A, B, C, E, F wired|
-|ares\_hold\_monitor.py|✓ Done|A, B, C, E, F wired|
-|statistical\_validation.py|✓ Done|IC calibration + FDR + Ledoit-Wolf|
-|ares\_watchdog.py|✓ Done|Intraday hard stop + circuit breaker|
-|ares\_signal\_audit.py|✓ Done|Signal distribution + shadow audit|
-|ares\_threshold\_deriver.py|✓ Done|Derives TODO:DERIVE constants|
-|sub\_engine\_params.json|✓ Done|Bootstrap equal weights pre-loaded|
+|engine\_a.py|✓ Shadow|0/30 classifications (built session 3)|
+|exit\_monitor\_a.py|✓ Done|6 exit conditions (built session 3)|
+|hold\_monitor\_a.py|✓ Done|5 layers + ADX slope penalty (built session 3)|
+|engine\_f.py|✓ Shadow|0/30 classifications (built session 3)|
+|exit\_monitor\_f.py|✓ Done|5 exits + partial trim (built session 3)|
+|hold\_monitor\_f.py|✓ Done|5-layer breakout health (built session 3)|
+|engine\_c.py|✓ Shadow|0/30 classifications (built session 4)|
+|exit\_monitor\_c.py|✓ Done|4 exit conditions (built session 4)|
+|hold\_monitor\_c.py|✓ Done|4-layer squeeze health (built session 4)|
+|engine\_e.py|✓ Shadow|0/30 classifications (built session 4)|
+|exit\_monitor\_e.py|✓ Done|RS exit conditions (built session 4)|
+|hold\_monitor\_e.py|✓ Done|RS health scoring (built session 4)|
+|ares\_exit\_monitor.py|✓ Done|A, B, C, E, F wired (updated session 4)|
+|ares\_hold\_monitor.py|✓ Done|A, B, C, E, F wired (updated session 4)|
+|statistical\_validation.py|✓ Done|IC calibration + FDR + Ledoit-Wolf (new session 5)|
+|ares\_watchdog.py|✓ Done|Intraday hard stop + circuit breaker (new session 5)|
+|ares\_signal\_audit.py|✓ Done|Signal distribution + shadow audit (new session 5)|
+|ares\_threshold\_deriver.py|✓ Done|Derives TODO:DERIVE constants (new session 5)|
+|sub\_engine\_params.json|✓ Done|Bootstrap equal weights pre-loaded (new session 5)|
 
 ### Deferred
 
@@ -226,7 +233,7 @@ Engine D (when built — separate intraday runtime):
 |-|-|
 |engine\_d.py|Needs intraday runtime (minute bars, 9:30–11:30 loop)|
 
-\---
+---
 
 ## END OF SESSION CHECKLIST
 
@@ -251,16 +258,16 @@ grep -rn "from signals import\|import signals" engine_*.py 2>/dev/null && echo "
 ### Steve's side
 
 ```powershell
-# Copy all downloaded files into Ares folder
-# Overwrite existing files when prompted
-# Once git is initialized:
-# git add -A
-# git commit -m "Session description (2026-MM-DD)"
-# git push origin main
+# Copy all downloaded files into Ares folder, overwriting existing
+# Then commit and push:
+git add -A
+git status --short   # CONFIRM no _env, .env, *.log, __pycache__ appear
+git commit -m "Session N: <brief description> (2026-MM-DD)"
+git push origin main
 Remove-Item -Recurse -Force __pycache__ -ErrorAction SilentlyContinue
 ```
 
-\---
+---
 
 ## RULES CLAUDE MUST FOLLOW
 

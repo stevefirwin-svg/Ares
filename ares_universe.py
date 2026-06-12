@@ -43,7 +43,7 @@ from ares_config import (
     UNIVERSE_MIN_DOLLAR_VOL, UNIVERSE_MIN_SHARE_VOL, UNIVERSE_MIN_ATR_PCT,
 )
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [AresUniverse] %(message)s")
 logger = logging.getLogger("ares.universe")

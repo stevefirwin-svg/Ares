@@ -31,7 +31,7 @@ from dotenv import load_dotenv
 
 from ares_config import IC_HORIZON_DAYS, IC_CALIBRATION_GATE
 
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
 ALPACA_KEY    = os.getenv("ARES_ALPACA_API_KEY")
 ALPACA_SECRET = os.getenv("ARES_ALPACA_SECRET_KEY")

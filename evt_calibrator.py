@@ -54,9 +54,7 @@ import numpy as np
 import requests
 from scipy.stats import genpareto
 from dotenv import load_dotenv
-load_dotenv()
-
-from ares_config import BAR_FEED
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [EVT] %(message)s")
 logger = logging.getLogger("ares.evt")
@@ -74,90 +72,94 @@ def _alpaca_headers() -> dict:
     }
 
 
-def fetch_universe_returns(n_symbols: int = 80, lookback_days: int = 252) -> np.ndarray:
+def fetch_universe_returns(n_symbols: int = 100, lookback_days: int = 252) -> np.ndarray:
     """
     Fetch 1-year daily returns for n_symbols liquid names.
     Used for bootstrap EVT when engine-specific trade history is absent.
 
     Returns array of ATR-normalized 1-day adverse moves (positive values = bad moves).
-
-    Uses single-symbol endpoint (/v2/stocks/{symbol}/bars) — works on paper/free
-    accounts. The bulk multi-symbol endpoint requires a paid data subscription.
     """
+    # Use a fixed representative set of liquid names for bootstrap
+    # Chosen to span sectors and market caps — not the whole universe
     BOOTSTRAP_SYMBOLS = [
         "AAPL","MSFT","NVDA","GOOGL","AMZN","META","TSLA","JPM","UNH","V",
         "XOM","JNJ","PG","HD","MA","BAC","ABBV","MRK","CVX","AVGO",
         "COST","PEP","KO","TMO","ACN","MCD","CSCO","ABT","LIN","DHR",
-        "WMT","TXN","NEE","PM","NKE","RTX","QCOM","LOW","BMY","UPS",
-        "AMGN","SBUX","IBM","GS","BLK","CAT","BA","DE","SPG","PLD",
+        "WMT","TXN","NEE","PM","NKE","RTX","INTC","QCOM","LOW","BMY",
+        "UPS","AMGN","SBUX","IBM","GS","BLK","CAT","BA","DE","MMM",
+        "SPG","PLD","EQIX","AMT","CCI","DLR","PSA","O","WELL","VTR",
         "XLK","XLF","XLV","XLE","XLY","XLI","XLB","XLC","XLU","XLRE",
         "AMD","MU","LRCX","AMAT","KLAC","MRVL","PANW","CRWD","SNOW","ZS",
-        "F","GM","CVS","MCK","MOH","CNC","ELV","MS","C","WFC",
+        "DXCM","IDXX","ALGN","HOLX","TECH","BIO","MASI","PODD","NEOG","NVCR",
+        "F","GM","RIVN","LCID","STLA","TM","HMC","MBLY","LEA","BWA",
+        "GS","MS","C","WFC","USB","TFC","PNC","CFG","FITB","HBAN",
+        "CVS","MCK","AHT","CAH","COR","PDCO","HSIC","MOH","CNC","ELV",
     ][:n_symbols]
 
     end   = datetime.now()
     start = end - timedelta(days=int(lookback_days * 1.4))
+    params = {
+        "symbols":   ",".join(BOOTSTRAP_SYMBOLS),
+        "timeframe": "1Day",
+        "start":     start.strftime("%Y-%m-%d"),
+        "end":       end.strftime("%Y-%m-%d"),
+        "limit":     50000,
+        "feed":      "iex",
+    }
+    try:
+        resp = requests.get(
+            "https://data.alpaca.markets/v2/stocks/bars",
+            headers=_alpaca_headers(), params=params, timeout=60
+        )
+        resp.raise_for_status()
+        data = resp.json().get("bars", {})
+    except Exception as e:
+        logger.error("Bar fetch for EVT bootstrap failed: %s", e)
+        return np.array([])
 
     adverse_moves = []
-    fetched = 0
-
-    for sym in BOOTSTRAP_SYMBOLS:
-        try:
-            params = {
-                "timeframe": "1Day",
-                "start":     start.strftime("%Y-%m-%d"),
-                "end":       end.strftime("%Y-%m-%d"),
-                "limit":     500,
-                "feed":      BAR_FEED,
-                "sort":      "asc",
-            }
-            resp = requests.get(
-                f"https://data.alpaca.markets/v2/stocks/{sym}/bars",
-                headers=_alpaca_headers(), params=params, timeout=15
-            )
-            if resp.status_code != 200:
-                continue
-            bar_list = resp.json().get("bars", [])
-            if len(bar_list) < 30:
-                continue
-
-            df = pd.DataFrame(bar_list)
-            df.rename(columns={"o":"open","h":"high","l":"low","c":"close","v":"volume"}, inplace=True)
-
-            close = df["close"].values
-            high  = df["high"].values
-            low   = df["low"].values
-            rets  = np.diff(close) / close[:-1]
-
-            tr_arr = []
-            for i in range(1, len(close)):
-                tr = max(high[i] - low[i],
-                         abs(high[i] - close[i-1]),
-                         abs(low[i] - close[i-1]))
-                tr_arr.append(tr)
-            tr_arr = np.array(tr_arr)
-
-            for i in range(13, len(rets)):
-                atr_14 = float(np.mean(tr_arr[max(0, i-13):i+1]))
-                if atr_14 <= 0:
-                    continue
-                price = close[i]
-                if price <= 0:
-                    continue
-                atr_normalized_move = -rets[i] * price / atr_14
-                adverse_moves.append(atr_normalized_move)
-
-            fetched += 1
-            if fetched % 10 == 0:
-                logger.info("EVT bootstrap: %d/%d symbols, %d moves",
-                            fetched, len(BOOTSTRAP_SYMBOLS), len(adverse_moves))
-
-        except Exception as e:
-            logger.debug("EVT bootstrap skip %s: %s", sym, e)
+    for sym, bar_list in data.items():
+        if len(bar_list) < 30:
             continue
+        df = pd.DataFrame(bar_list)
+        df.rename(columns={"o":"open","h":"high","l":"low","c":"close","v":"volume"}, inplace=True)
 
-    logger.info("EVT bootstrap complete: %d symbols, %d adverse moves", fetched, len(adverse_moves))
-    return np.array(adverse_moves) if adverse_moves else np.array([])
+        close = df["close"].values
+        high  = df["high"].values
+        low   = df["low"].values
+
+        # 1-day return
+        rets = np.diff(close) / close[:-1]
+
+        # ATR (14-day rolling, simplified here as expanding)
+        tr_arr = []
+        for i in range(1, len(close)):
+            tr = max(high[i] - low[i],
+                     abs(high[i] - close[i-1]),
+                     abs(low[i] - close[i-1]))
+            tr_arr.append(tr)
+        tr_arr = np.array(tr_arr)
+
+        # Rolling 14-day ATR
+        for i in range(13, len(rets)):
+            atr_14 = float(np.mean(tr_arr[max(0,i-13):i+1]))
+            if atr_14 <= 0:
+                continue
+            price = close[i]
+            if price <= 0:
+                continue
+            # ATR-normalized adverse move (flip sign: we want magnitude of down moves)
+            atr_normalized_move = -rets[i] * price / atr_14  # positive = adverse
+            adverse_moves.append(atr_normalized_move)
+
+    if not adverse_moves:
+        logger.warning("No adverse moves computed — check bar fetch")
+        return np.array([])
+
+    arr = np.array(adverse_moves)
+    logger.info("Bootstrap: %d ATR-normalized daily moves from %d symbols",
+                len(arr), len(data))
+    return arr
 
 
 def fetch_engine_adverse_moves(engine_id: str) -> np.ndarray:

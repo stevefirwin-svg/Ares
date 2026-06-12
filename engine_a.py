@@ -65,7 +65,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
 from ares_config import (
     ALPACA_API_KEY, ALPACA_SECRET_KEY, ALPACA_BASE_URL,

@@ -13,7 +13,7 @@ Two-level guard:
 Usage:
     from margin_guard import check_margin_safety, check_engine_budget
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
     # Portfolio-level gate (run once per scan)
     allowed, max_new, reason = check_margin_safety(dm)

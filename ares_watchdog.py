@@ -49,7 +49,7 @@ from ares_config import (
 )
 from ledger import Ledger
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
 os.makedirs("logs", exist_ok=True)
 logging.basicConfig(

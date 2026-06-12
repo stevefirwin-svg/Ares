@@ -36,7 +36,7 @@ import pandas as pd
 from ares_config import ENGINE_STATUS, BARS_LOOKBACK
 from ledger import Ledger
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
 os.makedirs("logs", exist_ok=True)
 logging.basicConfig(

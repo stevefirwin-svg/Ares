@@ -1,3 +1,7 @@
+import os
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
+
 # ares_config.py — Ares Trading System Configuration
 # Last updated: 2026-05-29
 #
