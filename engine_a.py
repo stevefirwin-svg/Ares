@@ -65,7 +65,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
+load_dotenv()
 
 from ares_config import (
     ALPACA_API_KEY, ALPACA_SECRET_KEY, ALPACA_BASE_URL,
@@ -96,6 +96,12 @@ UNIVERSE_FILE = "universe.json"
 
 SPY_LOOKBACK  = 252   # bars needed for SPY 200MA check
 
+# Engine A requires 252 bars for 12-1 momentum (a_mom_12_1 uses price[-252]).
+# Global BARS_LOOKBACK=120 is insufficient. Override here.
+# 252 trading bars × 1.6 calendar buffer = 403 days → round to 400.
+# TODO:DERIVE — confirm Alpaca IEX history depth supports 400-day lookback
+ENGINE_A_BARS_LOOKBACK = 400
+
 
 # ── Data helpers ──────────────────────────────────────────────────────────────
 
@@ -116,49 +122,66 @@ def _save_json_atomic(path: str, data):
     os.replace(tmp, path)
 
 
-def fetch_bars(symbols: List[str], lookback: int = BARS_LOOKBACK) -> Dict[str, pd.DataFrame]:
-    """Fetch daily OHLCV bars from Alpaca for a list of symbols."""
-    import requests as req
+def fetch_bars(symbols: List[str], lookback: int = ENGINE_A_BARS_LOOKBACK) -> Dict[str, pd.DataFrame]:
+    """
+    Fetch daily OHLCV bars via yfinance.
+
+    Replaces Alpaca/IEX bar endpoint which only covers ~2-3% of consolidated
+    tape on paper accounts, causing 60-80% of universe symbols to return no data.
+    yfinance covers all symbols with 5+ years of history at no cost.
+    Order submission remains on Alpaca (unaffected).
+    """
+    import yfinance as yf
     from datetime import timedelta
 
     end   = datetime.now()
-    start = end - timedelta(days=int(lookback * 1.6))  # buffer for weekends/holidays
-
-    headers = {
-        "APCA-API-KEY-ID":     ALPACA_API_KEY,
-        "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY,
-    }
+    start = end - timedelta(days=int(lookback * 1.6))  # calendar buffer for weekends/holidays
     bars_out = {}
 
-    for i in range(0, len(symbols), 200):
-        batch = symbols[i:i+200]
-        params = {
-            "symbols":   ",".join(batch),
-            "timeframe": "1Day",
-            "start":     start.strftime("%Y-%m-%d"),
-            "end":       end.strftime("%Y-%m-%d"),
-            "limit":     10000,
-            "feed":      BAR_FEED,
-        }
+    # yfinance download handles batches natively; batch in groups of 100 for reliability
+    for i in range(0, len(symbols), 100):
+        batch = symbols[i:i+100]
         try:
-            resp = req.get(
-                "https://data.alpaca.markets/v2/stocks/bars",
-                headers=headers, params=params, timeout=30
+            raw = yf.download(
+                tickers=batch,
+                start=start.strftime("%Y-%m-%d"),
+                end=end.strftime("%Y-%m-%d"),
+                interval="1d",
+                auto_adjust=True,
+                progress=False,
+                threads=True,
             )
-            resp.raise_for_status()
-            data = resp.json().get("bars", {})
-            for sym, bar_list in data.items():
-                if not bar_list:
-                    continue
-                df = pd.DataFrame(bar_list)
-                df.rename(columns={"o":"open","h":"high","l":"low","c":"close",
-                                   "v":"volume","vw":"vwap","t":"timestamp"}, inplace=True)
-                df["timestamp"] = pd.to_datetime(df["timestamp"])
-                df = df.sort_values("timestamp").tail(lookback)
+            if raw.empty:
+                continue
+
+            # yfinance returns MultiIndex columns when multiple tickers requested
+            if isinstance(raw.columns, pd.MultiIndex):
+                for sym in batch:
+                    try:
+                        df = raw.xs(sym, axis=1, level=1).copy()
+                        df.columns = [c.lower() for c in df.columns]
+                        df = df.rename(columns={"open":"open","high":"high","low":"low",
+                                                "close":"close","volume":"volume"})
+                        df = df.dropna(subset=["close"])
+                        df["timestamp"] = df.index
+                        df = df.reset_index(drop=True).tail(lookback)
+                        if len(df) >= 60:
+                            bars_out[sym] = df
+                    except Exception:
+                        continue
+            else:
+                # Single ticker: flat columns
+                sym = batch[0]
+                df = raw.copy()
+                df.columns = [c.lower() for c in df.columns]
+                df = df.dropna(subset=["close"])
+                df["timestamp"] = df.index
+                df = df.reset_index(drop=True).tail(lookback)
                 if len(df) >= 60:
                     bars_out[sym] = df
+
         except Exception as e:
-            logger.warning("Bar fetch batch failed: %s", e)
+            logger.warning("yfinance bar fetch failed (batch %d): %s", i // 100, e)
 
     return bars_out
 
@@ -308,10 +331,17 @@ def compute_adx(df: pd.DataFrame, period: int = 14) -> Tuple[float, float]:
     )
 
     def _smooth(arr, n):
+        """
+        Wilder smoothing (running average, not cumulative sum).
+        ADX[i] = ((ADX[i-1] * (n-1)) + arr[i]) / n
+        Produces values on the same scale as the input.
+        """
         out = np.zeros(len(arr))
-        out[n-1] = arr[:n].sum()
+        if len(arr) < n:
+            return out
+        out[n-1] = arr[:n].mean()   # seed with simple average, not sum
         for i in range(n, len(arr)):
-            out[i] = out[i-1] - out[i-1] / n + arr[i]
+            out[i] = (out[i-1] * (n - 1) + arr[i]) / n
         return out
 
     atr_s     = _smooth(tr, period)
@@ -326,10 +356,10 @@ def compute_adx(df: pd.DataFrame, period: int = 14) -> Tuple[float, float]:
 
     adx_s = _smooth(dx, period)
 
-    # Final values
-    adx_val  = float(adx_s[-1]) if len(adx_s) > 0 else 0.0
-    pdi_last = float(plus_di[-1]) if len(plus_di) > 0 else 0.0
-    mdi_last = float(minus_di[-1]) if len(minus_di) > 0 else 0.0
+    # Clip to [0, 100] as a safety rail — correct Wilder smoothing keeps values in range
+    adx_val  = float(np.clip(adx_s[-1], 0.0, 100.0)) if len(adx_s) > 0 else 0.0
+    pdi_last = float(np.clip(plus_di[-1], 0.0, 100.0)) if len(plus_di) > 0 else 0.0
+    mdi_last = float(np.clip(minus_di[-1], 0.0, 100.0)) if len(minus_di) > 0 else 0.0
     adx_dir  = 1.0 if pdi_last > mdi_last else -1.0
 
     return round(adx_val, 2), adx_dir
@@ -699,7 +729,7 @@ def log_unconditioned_shadow(symbol: str, entry_price: float, engine_score: floa
     _save_json_atomic(SHADOW_FILE, shadow_data)
 
 
-
+def count_shadow_entries() -> int:
     shadow = _load_json(SHADOW_FILE, {"classifications": []})
     return sum(1 for c in shadow["classifications"] if c.get("engine_id") == ENGINE_ID)
 

@@ -77,7 +77,15 @@ import numpy as np
 import yfinance as yf
 from hmmlearn import hmm
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [HMM] %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [HMM] %(levelname)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(f"logs/hamilton_{datetime.now():%Y%m%d}.log"),
+    ],
+)
+os.makedirs("logs", exist_ok=True)
 logger = logging.getLogger("ares.hamilton")
 
 MODEL_FILE       = "hamilton_model.pkl"

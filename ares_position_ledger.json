@@ -1,0 +1,84 @@
+{
+  "positions": {
+    "E:CSCO": {
+      "engine_id": "E",
+      "symbol": "CSCO",
+      "shares": 3,
+      "entry_price": 125.97,
+      "entry_date": "2026-06-03",
+      "metadata": {
+        "engine_score": 0.7481,
+        "kelly_scale": 0.6705,
+        "macro_mult": 0.9787,
+        "stop_price": 114.5582,
+        "hold_target_days": 20,
+        "sector_etf": "XLK",
+        "macro_regime": "RISK_ON",
+        "signals_at_entry": {
+          "e_rs_20d": 0.145844,
+          "e_rs_60d": 0.243607,
+          "e_sector_rs_spy": 0.143171,
+          "e_rs_acceleration": 0.064642,
+          "e_new_rs_high": false,
+          "e_sector_etf": "XLK",
+          "atr": 3.8039,
+          "price": 125.97,
+          "e_stop_price": 114.5582
+        }
+      }
+    },
+    "E:IONQ": {
+      "engine_id": "E",
+      "symbol": "IONQ",
+      "shares": 7,
+      "entry_price": 70.05,
+      "entry_date": "2026-06-03",
+      "metadata": {
+        "engine_score": 0.8,
+        "kelly_scale": 0.734,
+        "macro_mult": 0.9787,
+        "stop_price": 55.3832,
+        "hold_target_days": 20,
+        "sector_etf": "XLK",
+        "macro_regime": "RISK_ON",
+        "signals_at_entry": {
+          "e_rs_20d": 0.268009,
+          "e_rs_60d": 0.541711,
+          "e_sector_rs_spy": 0.143171,
+          "e_rs_acceleration": 0.087439,
+          "e_new_rs_high": false,
+          "e_sector_etf": "XLK",
+          "atr": 4.8889,
+          "price": 70.05,
+          "e_stop_price": 55.3832
+        }
+      }
+    },
+    "B:ASTS": {
+      "engine_id": "B",
+      "symbol": "ASTS",
+      "shares": 4,
+      "entry_price": 82.425,
+      "entry_date": "2026-06-14",
+      "metadata": {
+        "engine_score": 0.659,
+        "kelly_scale": 0.5738,
+        "stop_price": 55.0243,
+        "hold_target_days": 8,
+        "macro_regime": "RISK_ON",
+        "signals_at_entry": {
+          "b_avwap_distance": -1.3394,
+          "b_stoch_divergence": true,
+          "b_stoch_k": 1.74,
+          "b_volume_climax": 2.626,
+          "b_ou_theta": 0.119466,
+          "b_ou_half_life": 5.8,
+          "b_hold_target_days": 8,
+          "atr": 13.7004,
+          "price": 82.425
+        }
+      }
+    }
+  },
+  "closed": []
+}

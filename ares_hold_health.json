@@ -1,0 +1,64 @@
+{
+  "CSCO": {
+    "symbol": "CSCO",
+    "engine_id": "E",
+    "tier": "DECAYING",
+    "score": -0.0271,
+    "pnl_pct": -3.89,
+    "days_held": 11,
+    "hold_target": 20,
+    "sector_etf": "XLK",
+    "rs_10d": 0.0376,
+    "sec_rs_10d": -0.0132,
+    "layers": {
+      "rs_vs_sector": 0.8233,
+      "sector_rs_spy": 0.1131,
+      "price_trend": 0.5,
+      "rs_acceleration": 0.25,
+      "time_decay": 0.45
+    },
+    "scored_at": "2026-06-14T09:52:03.088790"
+  },
+  "IONQ": {
+    "symbol": "IONQ",
+    "engine_id": "E",
+    "tier": "EXHAUSTED",
+    "score": -0.8034,
+    "pnl_pct": -17.43,
+    "days_held": 11,
+    "hold_target": 20,
+    "sector_etf": "XLK",
+    "rs_10d": -0.1648,
+    "sec_rs_10d": -0.0132,
+    "layers": {
+      "rs_vs_sector": 0.0,
+      "sector_rs_spy": 0.1131,
+      "price_trend": 0.0,
+      "rs_acceleration": 0.25,
+      "time_decay": 0.45
+    },
+    "scored_at": "2026-06-14T09:52:03.090166"
+  },
+  "_last_run": "2026-06-14T09:52:03.090395",
+  "ASTS": {
+    "symbol": "ASTS",
+    "engine_id": "B",
+    "tier": "EXHAUSTED",
+    "score": -0.4368,
+    "pnl_pct": 0.0,
+    "days_held": 0,
+    "hold_target": 8,
+    "price": 82.425,
+    "avwap": 100.7746,
+    "atr": 13.7004,
+    "stoch_k": 1.74,
+    "layers": {
+      "avwap_proximity": 0.0,
+      "ou_reversion_speed": 0.5,
+      "volume_profile": 0.283,
+      "stoch_exit_zone": 0.0,
+      "time_decay": 1.0
+    },
+    "scored_at": "2026-06-14T09:52:02.664034"
+  }
+}

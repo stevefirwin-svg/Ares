@@ -62,7 +62,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
+load_dotenv(override=True)
 
 from ares_config import (
     ALPACA_API_KEY, ALPACA_SECRET_KEY, ALPACA_BASE_URL,
@@ -121,46 +121,63 @@ def _save_json_atomic(path, data):
 
 
 def fetch_bars(symbols: List[str], lookback: int = BARS_LOOKBACK) -> Dict[str, pd.DataFrame]:
-    import requests as req
+    """
+    Fetch daily OHLCV bars via yfinance.
+
+    Replaces Alpaca/IEX bar endpoint which only covers ~2-3% of consolidated
+    tape on paper accounts, causing 60-80% of universe symbols to return no data.
+    yfinance covers all symbols with 5+ years of history at no cost.
+    Order submission remains on Alpaca (unaffected).
+    """
+    import yfinance as yf
     from datetime import timedelta
+
     if not symbols:
         return {}
     end   = datetime.now()
     start = end - timedelta(days=int(lookback * 1.6))
-    headers = {
-        "APCA-API-KEY-ID":     ALPACA_API_KEY,
-        "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY,
-    }
     bars_out = {}
-    for i in range(0, len(symbols), 200):
-        batch  = symbols[i:i+200]
-        params = {
-            "symbols":   ",".join(batch),
-            "timeframe": "1Day",
-            "start":     start.strftime("%Y-%m-%d"),
-            "end":       end.strftime("%Y-%m-%d"),
-            "limit":     10000,
-            "feed":      "iex",
-        }
+
+    for i in range(0, len(symbols), 100):
+        batch = symbols[i:i+100]
         try:
-            resp = req.get(
-                "https://data.alpaca.markets/v2/stocks/bars",
-                headers=headers, params=params, timeout=30
+            raw = yf.download(
+                tickers=batch,
+                start=start.strftime("%Y-%m-%d"),
+                end=end.strftime("%Y-%m-%d"),
+                interval="1d",
+                auto_adjust=True,
+                progress=False,
+                threads=True,
             )
-            resp.raise_for_status()
-            data = resp.json().get("bars", {})
-            for sym, bar_list in data.items():
-                if not bar_list:
-                    continue
-                df = pd.DataFrame(bar_list)
-                df.rename(columns={"o":"open","h":"high","l":"low","c":"close",
-                                   "v":"volume","vw":"vwap","t":"timestamp"}, inplace=True)
-                df["timestamp"] = pd.to_datetime(df["timestamp"])
-                df = df.sort_values("timestamp").tail(lookback)
+            if raw.empty:
+                continue
+
+            if isinstance(raw.columns, pd.MultiIndex):
+                for sym in batch:
+                    try:
+                        df = raw.xs(sym, axis=1, level=1).copy()
+                        df.columns = [c.lower() for c in df.columns]
+                        df = df.dropna(subset=["close"])
+                        df["timestamp"] = df.index
+                        df = df.reset_index(drop=True).tail(lookback)
+                        if len(df) >= BB_PERIOD + 5:
+                            bars_out[sym] = df
+                    except Exception:
+                        continue
+            else:
+                sym = batch[0]
+                df = raw.copy()
+                df.columns = [c.lower() for c in df.columns]
+                df = df.dropna(subset=["close"])
+                df["timestamp"] = df.index
+                df = df.reset_index(drop=True).tail(lookback)
                 if len(df) >= BB_PERIOD + 5:
                     bars_out[sym] = df
+
         except Exception as e:
-            logger.warning("Bar fetch failed: %s", e)
+            logger.warning("yfinance bar fetch failed (batch %d): %s", i // 100, e)
+
     return bars_out
 
 

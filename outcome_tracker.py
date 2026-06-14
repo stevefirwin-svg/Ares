@@ -23,6 +23,7 @@ IC validity rules:
 
 import os
 import json
+import logging
 import argparse
 import requests
 from datetime import datetime, timezone, timedelta
@@ -31,7 +32,7 @@ from dotenv import load_dotenv
 
 from ares_config import IC_HORIZON_DAYS, IC_CALIBRATION_GATE
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
+load_dotenv()
 
 ALPACA_KEY    = os.getenv("ARES_ALPACA_API_KEY")
 ALPACA_SECRET = os.getenv("ARES_ALPACA_SECRET_KEY")
@@ -49,6 +50,17 @@ BAR_FEED = "sip" if _is_live else "iex"
 
 LEDGER_FILE   = "ares_position_ledger.json"
 OUTCOMES_FILE = "sub_engine_outcomes.json"
+
+os.makedirs("logs", exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [OutcomeTracker] %(levelname)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(f"logs/outcome_tracker_{datetime.now():%Y%m%d}.log"),
+    ],
+)
+logger = logging.getLogger("ares.outcome_tracker")
 
 TERMINAL_EXIT_PATHS = {
     "hard_stop", "trail_stop", "time_stop", "target", "manual",
@@ -90,42 +102,34 @@ def fetch_price_after(symbol: str, after_date: str, days: int) -> Optional[float
       3. Select index [days-1] of the strictly-ascending post-entry bars —
          this is the Nth trading bar after entry, regardless of calendar gaps.
 
+    Uses yfinance (replaces Alpaca/IEX which had coverage gaps on paper accounts).
     Returns None if fewer than N trading bars are available.
     """
     try:
-        entry_dt = parse_ts(after_date).date()
-        # Generous calendar buffer: N trading days ≈ N*1.6 + 10 calendar days
+        import yfinance as yf
+        entry_dt   = parse_ts(after_date).date()
         cal_buffer = int(days * 1.6) + 10
         end_dt     = entry_dt + timedelta(days=cal_buffer)
 
-        url = f"https://data.alpaca.markets/v2/stocks/{symbol}/bars"
-        params = {
-            "timeframe": "1Day",
-            "start":     entry_dt.strftime("%Y-%m-%d"),   # inclusive
-            "end":       end_dt.strftime("%Y-%m-%d"),
-            "limit":     days + 15,                        # enough to always get N+
-            "feed":      BAR_FEED,                         # RF-22: SIP for live, IEX for paper
-            "sort":      "asc",
-        }
-        resp = requests.get(url, headers=alpaca_headers(), params=params, timeout=10)
-        if resp.status_code != 200:
-            return None
-        bars = resp.json().get("bars", [])
-        if not bars:
+        raw = yf.download(
+            tickers=symbol,
+            start=entry_dt.strftime("%Y-%m-%d"),
+            end=end_dt.strftime("%Y-%m-%d"),
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+        )
+        if raw.empty:
             return None
 
-        # Drop the entry bar itself (date == after_date) — forward return is strictly post-entry
-        from datetime import date as date_type
-        post_entry = [
-            b for b in bars
-            if datetime.fromisoformat(b["t"].replace("Z", "+00:00")).date() > entry_dt
-        ]
-
-        # Select the Nth trading bar (0-indexed: days-1)
+        raw.index = raw.index.normalize()
+        # Drop the entry bar itself — forward return is strictly post-entry
+        post_entry = raw[raw.index.date > entry_dt]
         if len(post_entry) < days:
             return None
 
-        return float(post_entry[days - 1]["c"])
+        close_col = "Close" if "Close" in post_entry.columns else "close"
+        return float(post_entry[close_col].iloc[days - 1])
 
     except Exception:
         return None

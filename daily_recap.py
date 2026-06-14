@@ -34,9 +34,17 @@ from ares_config import (
     REALLOCATION_GATE_TRADES,
 )
 from dotenv import load_dotenv
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
+load_dotenv()
 
-logging.basicConfig(level=logging.WARNING)
+os.makedirs("logs", exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [DailyRecap] %(levelname)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(f"logs/daily_recap_{datetime.now():%Y%m%d}.log"),
+    ],
+)
 logger = logging.getLogger("ares.recap")
 
 EMAIL_SENDER   = "stevefirwin@gmail.com"

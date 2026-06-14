@@ -62,7 +62,7 @@ from typing import Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from dotenv import load_dotenv
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
+load_dotenv()
 
 from ares_config import (
     ALPACA_API_KEY, ALPACA_SECRET_KEY, ALPACA_BASE_URL,
@@ -111,49 +111,60 @@ def _save_json_atomic(path: str, data):
 
 
 def fetch_bars(symbols: List[str], lookback: int = BARS_LOOKBACK) -> Dict[str, pd.DataFrame]:
-    """Fetch daily OHLCV bars from Alpaca for a list of symbols."""
-    import requests as req
+    """
+    Fetch daily OHLCV bars via yfinance.
+
+    Replaces Alpaca/IEX bar endpoint which only covers ~2-3% of consolidated
+    tape on paper accounts, causing 60-80% of universe symbols to return no data.
+    yfinance covers all symbols with 5+ years of history at no cost.
+    Order submission remains on Alpaca (unaffected).
+    """
+    import yfinance as yf
     from datetime import timedelta
 
     end   = datetime.now()
-    start = end - timedelta(days=int(lookback * 1.6))  # buffer for weekends/holidays
-
-    headers = {
-        "APCA-API-KEY-ID":     ALPACA_API_KEY,
-        "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY,
-    }
+    start = end - timedelta(days=int(lookback * 1.6))
     bars_out = {}
 
-    # Batch in groups of 200 (Alpaca limit)
-    for i in range(0, len(symbols), 200):
-        batch = symbols[i:i+200]
-        params = {
-            "symbols":   ",".join(batch),
-            "timeframe": "1Day",
-            "start":     start.strftime("%Y-%m-%d"),
-            "end":       end.strftime("%Y-%m-%d"),
-            "limit":     10000,
-            "feed":      BAR_FEED,
-        }
+    for i in range(0, len(symbols), 100):
+        batch = symbols[i:i+100]
         try:
-            resp = req.get(
-                "https://data.alpaca.markets/v2/stocks/bars",
-                headers=headers, params=params, timeout=30
+            raw = yf.download(
+                tickers=batch,
+                start=start.strftime("%Y-%m-%d"),
+                end=end.strftime("%Y-%m-%d"),
+                interval="1d",
+                auto_adjust=True,
+                progress=False,
+                threads=True,
             )
-            resp.raise_for_status()
-            data = resp.json().get("bars", {})
-            for sym, bar_list in data.items():
-                if not bar_list:
-                    continue
-                df = pd.DataFrame(bar_list)
-                df.rename(columns={"o":"open","h":"high","l":"low","c":"close",
-                                   "v":"volume","vw":"vwap","t":"timestamp"}, inplace=True)
-                df["timestamp"] = pd.to_datetime(df["timestamp"])
-                df = df.sort_values("timestamp").tail(lookback)
+            if raw.empty:
+                continue
+
+            if isinstance(raw.columns, pd.MultiIndex):
+                for sym in batch:
+                    try:
+                        df = raw.xs(sym, axis=1, level=1).copy()
+                        df.columns = [c.lower() for c in df.columns]
+                        df = df.dropna(subset=["close"])
+                        df["timestamp"] = df.index
+                        df = df.reset_index(drop=True).tail(lookback)
+                        if len(df) >= 30:
+                            bars_out[sym] = df
+                    except Exception:
+                        continue
+            else:
+                sym = batch[0]
+                df = raw.copy()
+                df.columns = [c.lower() for c in df.columns]
+                df = df.dropna(subset=["close"])
+                df["timestamp"] = df.index
+                df = df.reset_index(drop=True).tail(lookback)
                 if len(df) >= 30:
                     bars_out[sym] = df
+
         except Exception as e:
-            logger.warning("Bar fetch batch failed: %s", e)
+            logger.warning("yfinance bar fetch failed (batch %d): %s", i // 100, e)
 
     return bars_out
 
@@ -177,9 +188,10 @@ def get_buying_power() -> float:
         return 0.0
 
 
-def submit_order(symbol: str, qty: int, client_order_id: str, dry_run: bool = False) -> Optional[dict]:
+def submit_order(symbol: str, qty: int, client_order_id: str,
+                 limit_price: float, dry_run: bool = False) -> Optional[dict]:
     if dry_run:
-        logger.info("[DRY] Would buy %d shares of %s", qty, symbol)
+        logger.info("[DRY] Would buy %d shares of %s @ %.2f", qty, symbol, limit_price)
         return {"id": "dry-run", "symbol": symbol, "qty": qty}
 
     import requests as req
@@ -189,16 +201,14 @@ def submit_order(symbol: str, qty: int, client_order_id: str, dry_run: bool = Fa
         "Content-Type":        "application/json",
     }
     body = {
-        "symbol":           symbol,
-        "qty":              str(qty),
-        "side":             "buy",
-        "type":             "limit",
-        "time_in_force":    "day",
-        "limit_price":      None,   # filled below
-        "client_order_id":  client_order_id,
+        "symbol":          symbol,
+        "qty":             str(qty),
+        "side":            "buy",
+        "type":            "limit",
+        "time_in_force":   "day",
+        "limit_price":     str(round(limit_price, 2)),
+        "client_order_id": client_order_id,
     }
-    # Use a limit 0.10% above last close to ensure fill
-    # Actual limit is set dynamically before this call
     try:
         resp = req.post(f"{ALPACA_BASE_URL}/v2/orders", headers=headers,
                         json=body, timeout=10)
@@ -693,7 +703,7 @@ def scan(dry_run: bool = False) -> List[dict]:
                 logger.info("SKIP %s — claimed between check and order", symbol)
                 continue
 
-            order = submit_order(symbol, qty, client_order_id, dry_run=dry_run)
+            order = submit_order(symbol, qty, client_order_id, limit_price, dry_run=dry_run)
             if order and order.get("id"):
                 entry_date = datetime.now().strftime("%Y-%m-%d")
                 ledger.record_entry(

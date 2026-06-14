@@ -75,7 +75,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
+load_dotenv()
 
 from ares_config import (
     ALPACA_API_KEY, ALPACA_SECRET_KEY, ALPACA_BASE_URL,
@@ -107,7 +107,10 @@ UNIVERSE_FILE = "universe.json"
 # Consolidation detection parameters
 CONSOL_LOOKBACK_MIN  = 15   # minimum bars for a valid consolidation
 CONSOL_LOOKBACK_PREF = 20   # preferred lookback
-CONSOL_RANGE_ATR_MAX = 1.5  # max ATR-normalized range for "tight" consolidation
+CONSOL_RANGE_ATR_MAX = 1.5  # max ATR-normalized range *per bar* for "tight" consolidation
+                             # range_atr = (max_high - min_low) / ATR / lookback_bars
+                             # 1.5 = stock moving ~1.5x its daily ATR per bar on average = trending
+                             # TODO:DERIVE — calibrate from shadow data once 30 F-trades exist
                              # TODO:DERIVE from shadow data — 1.5 is theoretical
 
 
@@ -131,48 +134,60 @@ def _save_json_atomic(path: str, data):
 
 
 def fetch_bars(symbols: List[str], lookback: int = BARS_LOOKBACK) -> Dict[str, pd.DataFrame]:
-    """Fetch daily OHLCV bars from Alpaca for a list of symbols."""
-    import requests as req
+    """
+    Fetch daily OHLCV bars via yfinance.
+
+    Replaces Alpaca/IEX bar endpoint which only covers ~2-3% of consolidated
+    tape on paper accounts, causing 60-80% of universe symbols to return no data.
+    yfinance covers all symbols with 5+ years of history at no cost.
+    Order submission remains on Alpaca (unaffected).
+    """
+    import yfinance as yf
     from datetime import timedelta
 
     end   = datetime.now()
     start = end - timedelta(days=int(lookback * 1.6))
-
-    headers = {
-        "APCA-API-KEY-ID":     ALPACA_API_KEY,
-        "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY,
-    }
     bars_out = {}
 
-    for i in range(0, len(symbols), 200):
-        batch = symbols[i:i+200]
-        params = {
-            "symbols":   ",".join(batch),
-            "timeframe": "1Day",
-            "start":     start.strftime("%Y-%m-%d"),
-            "end":       end.strftime("%Y-%m-%d"),
-            "limit":     10000,
-            "feed":      BAR_FEED,
-        }
+    for i in range(0, len(symbols), 100):
+        batch = symbols[i:i+100]
         try:
-            resp = req.get(
-                "https://data.alpaca.markets/v2/stocks/bars",
-                headers=headers, params=params, timeout=30
+            raw = yf.download(
+                tickers=batch,
+                start=start.strftime("%Y-%m-%d"),
+                end=end.strftime("%Y-%m-%d"),
+                interval="1d",
+                auto_adjust=True,
+                progress=False,
+                threads=True,
             )
-            resp.raise_for_status()
-            data = resp.json().get("bars", {})
-            for sym, bar_list in data.items():
-                if not bar_list:
-                    continue
-                df = pd.DataFrame(bar_list)
-                df.rename(columns={"o":"open","h":"high","l":"low","c":"close",
-                                   "v":"volume","vw":"vwap","t":"timestamp"}, inplace=True)
-                df["timestamp"] = pd.to_datetime(df["timestamp"])
-                df = df.sort_values("timestamp").tail(lookback)
+            if raw.empty:
+                continue
+
+            if isinstance(raw.columns, pd.MultiIndex):
+                for sym in batch:
+                    try:
+                        df = raw.xs(sym, axis=1, level=1).copy()
+                        df.columns = [c.lower() for c in df.columns]
+                        df = df.dropna(subset=["close"])
+                        df["timestamp"] = df.index
+                        df = df.reset_index(drop=True).tail(lookback)
+                        if len(df) >= CONSOL_LOOKBACK_PREF + 5:
+                            bars_out[sym] = df
+                    except Exception:
+                        continue
+            else:
+                sym = batch[0]
+                df = raw.copy()
+                df.columns = [c.lower() for c in df.columns]
+                df = df.dropna(subset=["close"])
+                df["timestamp"] = df.index
+                df = df.reset_index(drop=True).tail(lookback)
                 if len(df) >= CONSOL_LOOKBACK_PREF + 5:
                     bars_out[sym] = df
+
         except Exception as e:
-            logger.warning("Bar fetch batch failed: %s", e)
+            logger.warning("yfinance bar fetch failed (batch %d): %s", i // 100, e)
 
     return bars_out
 
@@ -314,8 +329,14 @@ def f_consol_quality(df: pd.DataFrame, atr: float,
 
     consol_high = float(consol["high"].max())
     consol_low  = float(consol["low"].min())
-    range_atr   = (consol_high - consol_low) / atr
+    # Per-bar normalization — consistent with is_valid_consolidation gate.
+    # range_atr_per_bar: 0.0 = no movement (perfect base), 1.5 = gate boundary
+    range_atr   = (consol_high - consol_low) / atr / len(consol)
 
+    # quality = 3.0 - range_atr_per_bar, clipped to [0, 3]:
+    # range_atr=0.0 → quality=3.0 (perfectly flat base)
+    # range_atr=1.5 → quality=1.5 (at the gate — just passes)
+    # range_atr≥3.0 → quality=0.0 (trending, should be gated out)
     quality = float(np.clip(3.0 - range_atr, 0.0, 3.0))
     return round(quality, 4), round(range_atr, 4), round(consol_low, 4)
 
@@ -468,7 +489,12 @@ def is_valid_consolidation(df: pd.DataFrame, atr: float,
     if len(consol) < CONSOL_LOOKBACK_MIN or atr <= 0:
         return False
     consol_range = float(consol["high"].max() - consol["low"].min())
-    return (consol_range / atr) < CONSOL_RANGE_ATR_MAX
+    # Normalize by lookback: range_atr = total_range / ATR / n_bars
+    # This measures average ATR-units of movement per bar during consolidation.
+    # A trending stock moves ~1.0 ATR/bar; a consolidating stock moves <0.5 ATR/bar.
+    # Gate of 1.5 filters out stocks that are still directionally moving.
+    range_atr_per_bar = (consol_range / atr) / len(consol)
+    return range_atr_per_bar < CONSOL_RANGE_ATR_MAX
 
 
 def is_breakout_bar(df: pd.DataFrame, lookback: int = CONSOL_LOOKBACK_PREF) -> bool:
