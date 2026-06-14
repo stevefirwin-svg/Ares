@@ -1,0 +1,16 @@
+﻿$py = "C:\Users\steve\AppData\Local\Programs\Python\Python313\pythonw.exe"
+$dir = "C:\Users\steve\OneDrive\Desktop\Ares"
+Register-ScheduledTask -TaskName "Ares_Hamilton" -TaskPath "\Ares\" -Action (New-ScheduledTaskAction -Execute $py -Argument "hamilton_filter.py" -WorkingDirectory $dir) -Trigger (New-ScheduledTaskTrigger -Daily -At "08:45") -RunLevel Limited -Force
+Register-ScheduledTask -TaskName "Ares_EngineA_Scan" -TaskPath "\Ares\" -Action (New-ScheduledTaskAction -Execute $py -Argument "engine_a.py --scan" -WorkingDirectory $dir) -Trigger (New-ScheduledTaskTrigger -Daily -At "09:35") -RunLevel Limited -Force
+Register-ScheduledTask -TaskName "Ares_EngineB_Scan" -TaskPath "\Ares\" -Action (New-ScheduledTaskAction -Execute $py -Argument "engine_b.py --scan" -WorkingDirectory $dir) -Trigger (New-ScheduledTaskTrigger -Daily -At "09:35") -RunLevel Limited -Force
+Register-ScheduledTask -TaskName "Ares_EngineC_Scan" -TaskPath "\Ares\" -Action (New-ScheduledTaskAction -Execute $py -Argument "engine_c.py --scan" -WorkingDirectory $dir) -Trigger (New-ScheduledTaskTrigger -Daily -At "09:36") -RunLevel Limited -Force
+Register-ScheduledTask -TaskName "Ares_EngineE_Scan" -TaskPath "\Ares\" -Action (New-ScheduledTaskAction -Execute $py -Argument "engine_e.py --scan" -WorkingDirectory $dir) -Trigger (New-ScheduledTaskTrigger -Daily -At "09:37") -RunLevel Limited -Force
+Register-ScheduledTask -TaskName "Ares_EngineF_Scan" -TaskPath "\Ares\" -Action (New-ScheduledTaskAction -Execute $py -Argument "engine_f.py --scan" -WorkingDirectory $dir) -Trigger (New-ScheduledTaskTrigger -Daily -At "09:38") -RunLevel Limited -Force
+Register-ScheduledTask -TaskName "Ares_ExitMonitor_AM" -TaskPath "\Ares\" -Action (New-ScheduledTaskAction -Execute $py -Argument "ares_exit_monitor.py" -WorkingDirectory $dir) -Trigger (New-ScheduledTaskTrigger -Daily -At "09:50") -RunLevel Limited -Force
+Register-ScheduledTask -TaskName "Ares_HoldMonitor_AM" -TaskPath "\Ares\" -Action (New-ScheduledTaskAction -Execute $py -Argument "ares_hold_monitor.py" -WorkingDirectory $dir) -Trigger (New-ScheduledTaskTrigger -Daily -At "09:52") -RunLevel Limited -Force
+Register-ScheduledTask -TaskName "Ares_ExitMonitor_PM" -TaskPath "\Ares\" -Action (New-ScheduledTaskAction -Execute $py -Argument "ares_exit_monitor.py" -WorkingDirectory $dir) -Trigger (New-ScheduledTaskTrigger -Daily -At "15:55") -RunLevel Limited -Force
+Register-ScheduledTask -TaskName "Ares_HoldMonitor_PM" -TaskPath "\Ares\" -Action (New-ScheduledTaskAction -Execute $py -Argument "ares_hold_monitor.py" -WorkingDirectory $dir) -Trigger (New-ScheduledTaskTrigger -Daily -At "15:58") -RunLevel Limited -Force
+Register-ScheduledTask -TaskName "Ares_OutcomeTracker" -TaskPath "\Ares\" -Action (New-ScheduledTaskAction -Execute $py -Argument "outcome_tracker.py --all-forward" -WorkingDirectory $dir) -Trigger (New-ScheduledTaskTrigger -Daily -At "16:15") -RunLevel Limited -Force
+Register-ScheduledTask -TaskName "Ares_DailyRecap" -TaskPath "\Ares\" -Action (New-ScheduledTaskAction -Execute $py -Argument "daily_recap.py" -WorkingDirectory $dir) -Trigger (New-ScheduledTaskTrigger -Daily -At "16:20") -RunLevel Limited -Force
+Write-Host "Done — verifying..." -ForegroundColor Green
+Get-ScheduledTask -TaskPath "\Ares\" | Select TaskName, State | Format-Table
