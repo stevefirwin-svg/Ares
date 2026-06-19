@@ -284,10 +284,45 @@ def build_macro_section(macro: dict) -> str:
         "RISK_OFF": "#ff8c00", "CRISIS": "#ff4444"
     }.get(regime, "#6a6a8a")
 
-    vix    = sigs.get("vix", {})
-    spy    = sigs.get("spy_trend", {})
-    credit = sigs.get("credit_spread", {})
-    bread  = sigs.get("sector_breadth", {})
+    # macro_context.json signals are flat: vix_level, spy_ret_20d_pct, credit_norm, breadth_z
+    vix_val    = sigs.get("vix_level", "—")
+    spy_val    = sigs.get("spy_ret_20d_pct", "—")
+    credit_val = sigs.get("credit_norm", "—")
+    breadth_val = sigs.get("breadth_z", "—")
+
+    # Derive sub-labels from raw values
+    def _vix_regime(v):
+        try:
+            v = float(v)
+            return "LOW" if v < 15 else "ELEVATED" if v < 25 else "HIGH"
+        except Exception:
+            return "—"
+
+    def _spy_regime(v):
+        try:
+            v = float(v)
+            return "UPTREND" if v > 1 else "FLAT" if v > -1 else "DOWNTREND"
+        except Exception:
+            return "—"
+
+    def _credit_regime(v):
+        try:
+            v = float(v)
+            return "TIGHT" if v < 0.98 else "NORMAL" if v < 1.05 else "WIDE"
+        except Exception:
+            return "—"
+
+    def _breadth_regime(v):
+        try:
+            v = float(v)
+            return "BROAD" if v > 0.5 else "MIXED" if v > -0.5 else "WEAK"
+        except Exception:
+            return "—"
+
+    vix_fmt    = f"{float(vix_val):.1f}" if vix_val != "—" else "—"
+    spy_fmt    = f"{float(spy_val):+.1f}%" if spy_val != "—" else "—"
+    credit_fmt = f"{float(credit_val):.4f}" if credit_val != "—" else "—"
+    breadth_fmt = f"{float(breadth_val):+.2f}" if breadth_val != "—" else "—"
 
     return f"""
     <div style="display:flex;gap:16px;flex-wrap:wrap">
@@ -298,23 +333,23 @@ def build_macro_section(macro: dict) -> str:
       </div>
       <div style="flex:1;min-width:100px;background:#0e0e20;padding:12px;border-radius:4px;text-align:center">
         <div style="color:#6a6a8a;font-size:10px;text-transform:uppercase">VIX</div>
-        <div style="color:#c0c0d0;font-size:16px;font-weight:700">{vix.get('value','—')}</div>
-        <div style="color:#6a6a8a;font-size:10px">{vix.get('regime','—')}</div>
+        <div style="color:#c0c0d0;font-size:16px;font-weight:700">{vix_fmt}</div>
+        <div style="color:#6a6a8a;font-size:10px">{_vix_regime(vix_val)}</div>
       </div>
       <div style="flex:1;min-width:100px;background:#0e0e20;padding:12px;border-radius:4px;text-align:center">
         <div style="color:#6a6a8a;font-size:10px;text-transform:uppercase">SPY 20d</div>
-        <div style="color:#c0c0d0;font-size:16px;font-weight:700">{spy.get('trend_20d','—')}%</div>
-        <div style="color:#6a6a8a;font-size:10px">{spy.get('regime','—')}</div>
+        <div style="color:#c0c0d0;font-size:16px;font-weight:700">{spy_fmt}</div>
+        <div style="color:#6a6a8a;font-size:10px">{_spy_regime(spy_val)}</div>
       </div>
       <div style="flex:1;min-width:100px;background:#0e0e20;padding:12px;border-radius:4px;text-align:center">
-        <div style="color:#6a6a8a;font-size:10px;text-transform:uppercase">Credit</div>
-        <div style="color:#c0c0d0;font-size:16px;font-weight:700">{credit.get('ratio_norm','—')}</div>
-        <div style="color:#6a6a8a;font-size:10px">{credit.get('regime','—')}</div>
+        <div style="color:#6a6a8a;font-size:10px;text-transform:uppercase">Credit Norm</div>
+        <div style="color:#c0c0d0;font-size:16px;font-weight:700">{credit_fmt}</div>
+        <div style="color:#6a6a8a;font-size:10px">{_credit_regime(credit_val)}</div>
       </div>
       <div style="flex:1;min-width:100px;background:#0e0e20;padding:12px;border-radius:4px;text-align:center">
-        <div style="color:#6a6a8a;font-size:10px;text-transform:uppercase">Breadth</div>
-        <div style="color:#c0c0d0;font-size:16px;font-weight:700">{bread.get('pct_above_50ma','—')}%</div>
-        <div style="color:#6a6a8a;font-size:10px">{bread.get('regime','—')}</div>
+        <div style="color:#6a6a8a;font-size:10px;text-transform:uppercase">Breadth Z</div>
+        <div style="color:#c0c0d0;font-size:16px;font-weight:700">{breadth_fmt}</div>
+        <div style="color:#6a6a8a;font-size:10px">{_breadth_regime(breadth_val)}</div>
       </div>
     </div>
     <div style="color:#3a3a5e;font-size:10px;margin-top:6px">Last updated: {ts} UTC</div>"""
@@ -339,6 +374,20 @@ def build_html(account: dict, positions_live: list, ledger: dict,
     holdings_rows  = build_holdings_rows(ledger, positions_live)
     activity_html  = build_todays_activity(ledger)
     macro_html     = build_macro_section(macro)
+
+    # ── Data quality check ─────────────────────────────────────────────────────
+    # Ledger vs outcomes reconciliation — log discrepancies
+    ledger_closed  = ledger.get("closed", [])
+    def _trade_key(t):
+        return (t.get("engine_id"), t.get("symbol"), str(t.get("entry_date",""))[:10])
+    ledger_keys  = {_trade_key(t) for t in ledger_closed}
+    outcome_keys = {_trade_key(t) for t in outcomes}
+    orphan_in_ledger   = ledger_keys - outcome_keys
+    orphan_in_outcomes = outcome_keys - ledger_keys
+    if orphan_in_ledger:
+        logger.warning(f"RECONCILE: {len(orphan_in_ledger)} trades in ledger not in outcomes: {orphan_in_ledger}")
+    if orphan_in_outcomes:
+        logger.warning(f"RECONCILE: {len(orphan_in_outcomes)} trades in outcomes not in ledger: {orphan_in_outcomes}")
 
     return f"""
     <!DOCTYPE html>

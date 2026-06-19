@@ -204,9 +204,8 @@ def submit_order(symbol: str, qty: int, client_order_id: str,
         "symbol":          symbol,
         "qty":             str(qty),
         "side":            "buy",
-        "type":            "limit",
+        "type":            "market",
         "time_in_force":   "day",
-        "limit_price":     str(round(limit_price, 2)),
         "client_order_id": client_order_id,
     }
     try:

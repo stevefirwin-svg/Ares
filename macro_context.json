@@ -1,20 +1,20 @@
 {
-  "timestamp": "2026-06-12T17:15:35.047744+00:00",
-  "macro_regime": "RISK_ON",
-  "macro_score": 0.8065,
+  "timestamp": "2026-06-19T12:45:33.305928+00:00",
+  "macro_regime": "NEUTRAL",
+  "macro_score": 0.5399,
   "regime_probs": {
-    "RISK_ON": 0.7545,
-    "NEUTRAL": 0.2016,
-    "RISK_OFF": 0.0439,
+    "RISK_ON": 0.3356,
+    "NEUTRAL": 0.6417,
+    "RISK_OFF": 0.0226,
     "CRISIS": 0.0
   },
   "method": "hmm_gaussian",
   "n_observations": 504,
   "signals": {
-    "spy_ret_20d_pct": -0.8,
-    "vix_level": 18.59,
-    "credit_norm": 1.0016,
-    "breadth_z": 0.1572
+    "spy_ret_20d_pct": 1.0,
+    "vix_level": 16.4,
+    "credit_norm": 1.0009,
+    "breadth_z": -0.8222
   },
-  "agent_summary": "MACRO (HMM): RISK_ON | RISK_ON=0.754  NEUTRAL=0.202  RISK_OFF=0.044  CRISIS=0.000 | score=+0.807"
+  "agent_summary": "MACRO (HMM): NEUTRAL | RISK_ON=0.336  NEUTRAL=0.642  RISK_OFF=0.023  CRISIS=0.000 | score=+0.540"
 }

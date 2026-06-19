@@ -1,5 +1,5 @@
 # Ares — Master Priority Plan
-*Last updated: 2026-06-14 (session 7 — yfinance, ADX fix, Engine F consolidation gate, logging pipeline)*
+*Last updated: 2026-06-19 (session 8 — reconciliation pipeline, position sync, market order fix, ic_valid fix)*
 *Source of truth: GitHub (stevefirwin-svg/Ares) + live code audit*
 
 ---
@@ -47,14 +47,20 @@ session confirming it. Documented-but-unverified fixes are NOT done.
 | RF-25 | MATH | MATH | BH-FDR applied per-engine not system-wide | ✅ CLOSED 2026-05-31 |
 | RF-26 | MATH | MATH | DSR n_trials=1 always | ✅ CLOSED 2026-05-31 |
 | RF-27 | HYGIENE | HYGIENE | Dead `if False` branch in GPD quantile | ✅ CLOSED 2026-05-31 |
-| RF-28 | HIGH | MATH | ADX Wilder smoothing used cumsum seed → values 300-500x too large | ✅ CLOSED 2026-06-14 — Wilder EMA fixed: mean seed + (prev*(n-1)+x)/n recurrence |
-| RF-29 | HIGH | ARCH | Engine A `BARS_LOOKBACK=120` < 252-bar minimum requirement | ✅ CLOSED 2026-06-14 — `ENGINE_A_BARS_LOOKBACK=400` |
-| RF-30 | HIGH | ARCH | Engine F `CONSOL_RANGE_ATR_MAX` compared total range to per-bar threshold → rejected 100% of universe | ✅ CLOSED 2026-06-14 — normalized to per-bar: `(range/ATR)/n_bars` |
-| RF-31 | HIGH | ARCH | Engine B `submit_order` had `limit_price=None` hardcoded → 422 on every order | ✅ CLOSED 2026-06-14 — `limit_price` param added and wired |
-| RF-32 | MED | ARCH | `BAR_FEED` missing from ares_config imports in engines A, B, C, F → NameError crash | ✅ CLOSED 2026-06-14 — added to all four |
-| RF-33 | MED | ARCH | `def count_shadow_entries` definition missing in engine_a.py (body orphaned) → NameError | ✅ CLOSED 2026-06-14 — def line restored |
-| RF-34 | MED | ARCH | hamilton_filter.py and outcome_tracker.py had no file logging → silent failures in Task Scheduler | ✅ CLOSED 2026-06-14 — FileHandler added to both |
-| RF-35 | MED | ARCH | outcome_tracker `fetch_price_after` used Alpaca/IEX endpoint → same coverage gap as engines | ✅ CLOSED 2026-06-14 — switched to yfinance |
+| RF-28 | HIGH | MATH | ADX Wilder smoothing used cumsum seed → values 300-500x too large | ✅ CLOSED 2026-06-14 |
+| RF-29 | HIGH | ARCH | Engine A `BARS_LOOKBACK=120` < 252-bar minimum | ✅ CLOSED 2026-06-14 — `ENGINE_A_BARS_LOOKBACK=400` |
+| RF-30 | HIGH | ARCH | Engine F consolidation gate rejected 100% of universe | ✅ CLOSED 2026-06-14 — normalized to per-bar |
+| RF-31 | HIGH | ARCH | Engine B `submit_order` had `limit_price=None` → 422 on every order | ✅ CLOSED 2026-06-14 |
+| RF-32 | MED | ARCH | `BAR_FEED` missing from imports in engines A,B,C,F → NameError crash | ✅ CLOSED 2026-06-14 |
+| RF-33 | MED | ARCH | `def count_shadow_entries` missing in engine_a.py → NameError | ✅ CLOSED 2026-06-14 |
+| RF-34 | MED | ARCH | hamilton_filter.py / outcome_tracker.py had no file logging → silent Task Scheduler failures | ✅ CLOSED 2026-06-14 |
+| RF-35 | MED | ARCH | outcome_tracker `fetch_price_after` used Alpaca/IEX → coverage gaps | ✅ CLOSED 2026-06-14 — yfinance |
+| RF-36 | CRITICAL | ARCH | All 5 engines used DAY LIMIT orders — unfilled orders wrote ghost ledger entries, causing accidental short positions in Alpaca | ✅ CLOSED 2026-06-19 — switched all engines to MARKET orders |
+| RF-37 | HIGH | ARCH | `ares_exit_monitor.py` still used IEX bar fetch — skipped symbols with no IEX coverage, missing exits | ✅ CLOSED 2026-06-19 — switched to yfinance |
+| RF-38 | HIGH | MATH | `trend_exhaustion` and `rs_lost` missing from `TERMINAL_EXIT_PATHS` → all Engine A trades and 1 Engine E trade had `ic_valid=False` incorrectly | ✅ CLOSED 2026-06-19 — added to set, 8 existing records backfilled |
+| RF-39 | MED | HYGIENE | `daily_recap.py` macro signal cards showed "—" — `build_macro_section()` read nested dict keys that don't exist in `macro_context.json` flat schema | ✅ CLOSED 2026-06-19 — fixed to read `vix_level`, `spy_ret_20d_pct`, `credit_norm`, `breadth_z` |
+| RF-40 | MED | HYGIENE | `symbol_ownership.json` had stale INTC/TSM locks (Engine F) with no open positions | ✅ CLOSED 2026-06-19 — cleaned up; `ares_reconcile.py --fix` now auto-removes stale locks |
+| RF-41 | HIGH | ARCH | No daily Alpaca vs ledger reconciliation — divergences accumulated silently for days | ✅ CLOSED 2026-06-19 — `ares_reconcile.py` + `ares_position_sync.py` added; `Ares_PositionSync_EOD` task scheduled at 4:05 PM |
 
 ---
 
@@ -65,34 +71,44 @@ Six independent engines (A–F), each with its own math and exit logic.
 Paper account ~$50K equity via Alpaca Markets.
 
 Bar data: **yfinance** (daily OHLCV, all 141 universe symbols, 5yr history).
-Orders: **Alpaca paper API** (limit orders, day TIF).
+Orders: **Alpaca paper API** (market orders, day TIF).
 Account state: **Alpaca paper API**.
 
 Engines compete for symbols via `symbol_ownership.json`. First engine to claim wins.
 
 ---
 
-## Current System State (2026-06-14 — Session 7)
+## Current System State (2026-06-19 — Session 8)
 
 | Component | Status |
 |-----------|--------|
-| All 5 engines (A,B,C,E,F) | ✅ LIVE — paper trading |
-| Bar data source | ✅ yfinance (all 141 symbols) |
-| Task Scheduler | ✅ All 12 tasks configured |
+| All 5 engines (A,B,C,E,F) | ✅ LIVE — paper trading, market orders |
+| Bar data source | ✅ yfinance (all engines + exit monitor) |
+| Task Scheduler | ✅ 13 tasks configured (added Ares_PositionSync_EOD) |
 | Log pipeline | ✅ All scripts write to logs/YYYYMMDD.log |
-| Engine E | 27/30 shadows — 3 from calibration gate |
-| Engine A | 6/30 shadows |
-| Engine B | 3/30 shadows (first live trade: ASTS today) |
-| Engine C | 1/30 shadows |
-| Engine F | 0/30 shadows (consolidation gate was broken — fixed today) |
-| EVT calibration | RF-7 OPEN — fallback stops in use |
+| Reconciliation pipeline | ✅ NEW — ares_reconcile.py + ares_position_sync.py |
+| ic_valid counts | ✅ Fixed — A: 7/10, E: 3/10 now correct |
+| Daily recap macro cards | ✅ Fixed — VIX/SPY/Credit/Breadth now display correctly |
 
-### Open positions
-| Symbol | Engine | Entry date | Entry | Stop | Hold |
-|--------|--------|-----------|-------|------|------|
-| CSCO | E | 2026-06-03 | $125.97 | $114.56 | 20d |
-| IONQ | E | 2026-06-03 | $70.05 | $55.38 | 20d |
-| ASTS | B | 2026-06-14 | $82.43 | $55.02 | 8d |
+### Open positions (as of 2026-06-19 EOD)
+| Symbol | Engine | Entry date | Entry Price | Stop | Hold |
+|--------|--------|-----------|-------------|------|------|
+| APLD | E | 2026-06-18 | $45.57 | $33.93 | 20d |
+
+### Confirmed shorts to cover Monday 9:30 AM
+| Symbol | Qty Short | Action |
+|--------|-----------|--------|
+| INTC | -12 | `python ares_position_sync.py --close-shorts` |
+| MRVL | -3 | same command covers both |
+
+### Closed trade summary (10 trades)
+| Engine | Trades | ic_valid | Net P&L |
+|--------|--------|----------|---------|
+| A | 7 | 7 | +$128.62 |
+| E | 3 | 3 | -$93.26 |
+| B | 0 | 0 | — |
+| C | 0 | 0 | — |
+| F | 0 | 0 | — |
 
 ---
 
@@ -100,9 +116,9 @@ Engines compete for symbols via `symbol_ownership.json`. First engine to claim w
 
 | Priority | Item | Action |
 |----------|------|--------|
-| HIGH | RF-7: EVT fallback stops | Run `python evt_calibrator.py` — all engines on 2.0× ATR fallback |
-| MED | ASTS stop too wide (-33%) | Engine B stop for high-volatility names is effectively the time stop (8d); EVT fix will improve this |
-| MED | macro_context.json stale (14d) | hamilton_filter.py Task Scheduler task may not be running — verify Monday |
+| CRITICAL | Cover INTC (-12) and MRVL (-3) shorts | Monday 9:30 AM: `python ares_position_sync.py --close-shorts` |
+| HIGH | RF-7: EVT fallback stops | Run `python evt_calibrator.py` — all engines on ATR fallback |
+| MED | Verify CIFR cover (order d39d8e75) actually filled | Monday: `python ares_position_sync.py --alpaca` |
 | LOW | Raptor files in Ares directory | Move to `raptor/` subdir when convenient |
 
 ---
@@ -132,6 +148,8 @@ COMPLETE:
                    ares_threshold_deriver.py, ares_watchdog.py ✓
   Session 7 — yfinance migration, ADX fix, Engine F gate fix,
                full logging pipeline, Task Scheduler ready ✓
+  Session 8 — reconciliation pipeline, position sync, market order fix,
+               ic_valid fix, macro recap fix, EOD ghost-void task ✓
 
 WAITING ON DATA (gate: ≥ 30 closed trades per engine):
   Sprint 5 execution — run statistical_validation.py, ares_threshold_deriver.py
@@ -144,46 +162,49 @@ WHEN ≥ 30 closed trades per engine:
 
 ---
 
-## FILE INVENTORY (session 7)
+## FILE INVENTORY (session 8)
 
 | File | Purpose | Status |
 |------|---------|--------|
 | ares_config.py | All Ares constants | ✓ |
 | ledger.py | engine_id keyed position ledger | ✓ |
-| symbol_ownership.json | Cross-engine symbol lock | ✓ |
+| symbol_ownership.json | Cross-engine symbol lock | ✓ cleaned session 8 |
 | macro_context.py | Signal fetcher backup | ✓ |
-| hamilton_filter.py | HMM macro regime | ✓ file logging added |
+| hamilton_filter.py | HMM macro regime | ✓ file logging |
 | margin_guard.py | Per-engine budget enforcement | ✓ |
-| outcome_tracker.py | Trade tagging + forward returns | ✓ yfinance + file logging |
+| outcome_tracker.py | Trade tagging + forward returns | ✓ TERMINAL_EXIT_PATHS fixed session 8 |
 | capital_allocator.py | Advisory weight calculator | ✓ |
-| daily_recap.py | Per-engine P&L summary | ✓ INFO-level file logging |
+| daily_recap.py | Per-engine P&L summary | ✓ macro cards fixed session 8 |
 | evt_calibrator.py | GPD/EVT stop derivation | ✓ fallback active (RF-7 open) |
 | ares_universe.py | Universe builder | ✓ 141 symbols |
-| engine_a.py | Momentum Continuation | ✓ LIVE — yfinance, ADX fixed, 400-bar |
+| engine_a.py | Momentum Continuation | ✓ LIVE — market orders session 8 |
 | exit_monitor_a.py | Engine A exits | ✓ 6 conditions |
 | hold_monitor_a.py | Engine A health | ✓ |
-| engine_b.py | Mean Reversion | ✓ LIVE — yfinance, limit_price fixed |
+| engine_b.py | Mean Reversion | ✓ LIVE — market orders session 8 |
 | exit_monitor_b.py | Engine B exits | ✓ 5 conditions |
 | hold_monitor_b.py | Engine B health | ✓ |
-| engine_c.py | Squeeze Break | ✓ LIVE — yfinance |
+| engine_c.py | Squeeze Break | ✓ LIVE — market orders session 8 |
 | exit_monitor_c.py | Engine C exits | ✓ 4 conditions |
 | hold_monitor_c.py | Engine C health | ✓ |
-| engine_e.py | RS Rotation | ✓ LIVE — yfinance |
+| engine_e.py | RS Rotation | ✓ LIVE — market orders session 8 |
 | exit_monitor_e.py | Engine E exits | ✓ |
 | hold_monitor_e.py | Engine E health | ✓ |
-| engine_f.py | Structural Breakout | ✓ LIVE — yfinance, consolidation gate fixed |
+| engine_f.py | Structural Breakout | ✓ LIVE — market orders session 8 |
 | exit_monitor_f.py | Engine F exits | ✓ 5 conditions + partial trim |
 | hold_monitor_f.py | Engine F health | ✓ |
-| ares_exit_monitor.py | Engine-dispatched exit monitor | ✓ A,B,C,E,F wired |
+| ares_exit_monitor.py | Engine-dispatched exit monitor | ✓ yfinance bars fixed session 8 |
 | ares_hold_monitor.py | Engine-dispatched hold monitor | ✓ A,B,C,E,F wired |
 | ares_watchdog.py | Intraday hard stop + circuit breaker | ✓ |
-| ares_diagnose.py | System health diagnostic | ✓ new session 7 |
+| ares_diagnose.py | System health diagnostic | ✓ |
+| ares_reconcile.py | Daily data integrity audit | ✓ NEW session 8 |
+| ares_position_sync.py | Alpaca vs ledger sync + short cover | ✓ NEW session 8 |
 | statistical_validation.py | IC + FDR + Ledoit-Wolf | ✓ |
 | ares_signal_audit.py | Signal distribution audit | ✓ |
 | ares_threshold_deriver.py | Derives TODO:DERIVE constants | ✓ |
 | sub_engine_params.json | Per-engine signal weights | ✓ bootstrap equal |
 | evt_calibration.json | Stop multiplier file | ✓ fallback active |
 | universe.json | Daily symbol list | ✓ 141 symbols |
-| macro_context.json | Current macro regime | ✓ HMM — verify Monday |
+| macro_context.json | Current macro regime | ✓ NEUTRAL as of 2026-06-19 |
 | shadow_classifications.json | Shadow mode log | ✓ |
-| sub_engine_outcomes.json | Per-engine trade history | ✓ |
+| sub_engine_outcomes.json | Per-engine trade history | ✓ ic_valid backfilled session 8 |
+| symbol_ownership.json | Cross-engine symbol lock | ✓ stale locks cleaned session 8 |

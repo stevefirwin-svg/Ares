@@ -65,10 +65,12 @@ logger = logging.getLogger("ares.outcome_tracker")
 TERMINAL_EXIT_PATHS = {
     "hard_stop", "trail_stop", "time_stop", "target", "manual",
     # Engine-specific terminal labels added as engines are built:
-    "avwap_reached",   # Engine B
-    "thesis_invalid",  # Engine B/A
-    "measured_move",   # Engine F
-    "sector_rotation", # Engine E
+    "avwap_reached",     # Engine B
+    "thesis_invalid",    # Engine B/A
+    "measured_move",     # Engine F
+    "sector_rotation",   # Engine E
+    "trend_exhaustion",  # Engine A — momentum exhaustion terminal exit
+    "rs_lost",           # Engine E — relative strength reversal terminal exit
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

@@ -53,48 +53,67 @@ logger = logging.getLogger("ares.exit_monitor")
 # ── Bar fetch ─────────────────────────────────────────────────────────────────
 
 def fetch_bars(symbols: List[str], lookback: int = BARS_LOOKBACK) -> Dict[str, pd.DataFrame]:
-    import requests as req
+    """
+    Fetch daily OHLCV bars via yfinance.
+
+    Switched from Alpaca/IEX (which only covers ~2-3% of consolidated tape on
+    paper accounts) to yfinance, which has full coverage for all symbols.
+    This matches the approach used in all scan engines.
+    Order submission remains on Alpaca — only bar data uses yfinance.
+    """
+    import yfinance as yf
     from datetime import timedelta
 
     if not symbols:
         return {}
 
-    end   = datetime.now()
-    start = end - timedelta(days=int(lookback * 1.6))
-    headers = {
-        "APCA-API-KEY-ID":     ALPACA_API_KEY,
-        "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY,
-    }
+    end_dt   = datetime.now()
+    start_dt = end_dt - timedelta(days=int(lookback * 1.6) + 10)
+
     bars_out = {}
-    for i in range(0, len(symbols), 200):
-        batch = symbols[i:i+200]
-        params = {
-            "symbols":   ",".join(batch),
-            "timeframe": "1Day",
-            "start":     start.strftime("%Y-%m-%d"),
-            "end":       end.strftime("%Y-%m-%d"),
-            "limit":     10000,
-            "feed":      "iex",
-        }
-        try:
-            resp = req.get(
-                "https://data.alpaca.markets/v2/stocks/bars",
-                headers=headers, params=params, timeout=30
-            )
-            resp.raise_for_status()
-            data = resp.json().get("bars", {})
-            for sym, bar_list in data.items():
-                if not bar_list:
+    # yfinance download accepts a space-separated string for multiple tickers
+    try:
+        raw = yf.download(
+            tickers=" ".join(symbols),
+            start=start_dt.strftime("%Y-%m-%d"),
+            end=end_dt.strftime("%Y-%m-%d"),
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+            group_by="ticker" if len(symbols) > 1 else None,
+        )
+        for sym in symbols:
+            try:
+                if len(symbols) == 1:
+                    df = raw.copy()
+                else:
+                    df = raw[sym].copy() if sym in raw.columns.get_level_values(0) else pd.DataFrame()
+                if df.empty or len(df) < 5:
                     continue
-                df = pd.DataFrame(bar_list)
-                df.rename(columns={"o":"open","h":"high","l":"low","c":"close",
-                                   "v":"volume","vw":"vwap","t":"timestamp"}, inplace=True)
-                df["timestamp"] = pd.to_datetime(df["timestamp"])
-                df = df.sort_values("timestamp").tail(lookback)
+                df.columns = [c.lower() for c in df.columns]
+                df = df.rename(columns={"adj close": "close"}) if "adj close" in df.columns else df
+                df = df[["open", "high", "low", "close", "volume"]].dropna()
+                df.index.name = "timestamp"
+                df = df.tail(lookback)
                 if len(df) >= 5:
                     bars_out[sym] = df
-        except Exception as e:
-            logger.warning("Bar fetch failed for batch: %s", e)
+            except Exception as e:
+                logger.debug("Bar parse failed for %s: %s", sym, e)
+    except Exception as e:
+        logger.warning("yfinance batch fetch failed: %s — falling back to per-symbol", e)
+        for sym in symbols:
+            try:
+                df = yf.download(sym, start=start_dt.strftime("%Y-%m-%d"),
+                                 end=end_dt.strftime("%Y-%m-%d"),
+                                 interval="1d", auto_adjust=True, progress=False)
+                if df.empty or len(df) < 5:
+                    continue
+                df.columns = [c.lower() for c in df.columns]
+                df = df.tail(lookback)
+                bars_out[sym] = df
+            except Exception as e2:
+                logger.debug("Per-symbol fetch failed for %s: %s", sym, e2)
+    logger.info("yfinance bars fetched for %d/%d symbols", len(bars_out), len(symbols))
     return bars_out
 
 

@@ -375,8 +375,8 @@ def check_scheduler():
 
     log_dirs = [
         r"C:\Windows\System32\winevt\Logs",
-        os.path.expanduser(r"~\OneDrive\Desktop\Ares\logs"),
-        os.path.expanduser(r"~\OneDrive\Desktop\Ares"),
+        "C:\\Ares\\logs",
+        "C:\\Ares",
         "logs",
     ]
 
