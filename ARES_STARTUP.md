@@ -1,7 +1,7 @@
 # ARES_STARTUP.md — Session Startup
 
 *Read first. Every session. No exceptions.
-Last updated: 2026-06-19 | Version: 1.6*
+Last updated: 2026-06-28 | Version: 1.7*
 
 ---
 
@@ -48,10 +48,15 @@ engine_e.py --scan                  9:37 AM ET
 engine_f.py --scan                  9:38 AM ET
 ares_exit_monitor.py                9:50 AM ET + 3:55 PM ET
 ares_hold_monitor.py                9:52 AM ET + 3:58 PM ET
-outcome_tracker.py --all-forward    4:15 PM ET
+ares_watchdog.py                    intraday loop, ~15 min cadence  ← was missing from this list (session 9)
 ares_position_sync.py --void-ghosts 4:05 PM ET  ← NEW session 8
+outcome_tracker.py --all-forward    4:15 PM ET
 daily_recap.py                      4:20 PM ET
 ```
+
+`ares_watchdog.py` (intraday hard stop + circuit breaker) runs on its own
+15-minute loop per its docstring but was not previously listed here —
+verify its actual Task Scheduler time against this file's cadence.
 
 If you accidentally run the Raptor `exit_monitor.py` or `watchdog.py` instead
 of `ares_exit_monitor.py` or `ares_watchdog.py`, Raptor will attempt to manage
@@ -78,6 +83,13 @@ git status --short
 Confirm none of the above appear. If they do, run `git rm --cached <filename>` before pushing.
 
 **If API keys are ever accidentally pushed: immediately rotate them in the Alpaca dashboard.**
+
+**Session 9 update (2026-06-28):** `env.txt` — a duplicate of `.env` containing
+the live Alpaca API key/secret in plaintext — was discovered committed to the
+public repo since the very first commit (`0179fa6`, 2026-06-03). It has been
+`git rm --cached` and added to `.gitignore` going forward. Per Steve's explicit
+decision, the key itself was **not** rotated. The real credentials the system
+reads continue to live in `.env` (still gitignored, never committed).
 
 ---
 
@@ -256,7 +268,7 @@ python ares_diagnose.py
 
 ---
 
-## SYSTEM STATE (2026-06-19 — Session 8)
+## SYSTEM STATE (2026-06-28 — Session 9 update; base table built 2026-06-19 — Session 8)
 
 ### Built and running (LIVE paper trading)
 
@@ -264,14 +276,16 @@ python ares_diagnose.py
 |------|--------|-------|
 | ares_config.py | ✓ Done | All Ares constants |
 | ledger.py | ✓ Done | engine_id keyed + update_metadata |
-| hamilton_filter.py | ✓ Done | HMM live, file logging |
+| hamilton_filter.py | ✓ Done | Session 9: logging dir created before basicConfig() (was crashing on fresh clone) |
 | macro_context.py | ✓ Done | FRED stripped |
 | margin_guard.py | ✓ Done | Per-engine budget |
 | outcome_tracker.py | ✓ Done | TERMINAL_EXIT_PATHS fixed session 8 |
 | capital_allocator.py | ✓ Done | Advisory only |
-| daily_recap.py | ✓ Done | Macro cards fixed session 8 |
-| evt_calibrator.py | ✓ Done | Fallback active — RF-7 still open |
-| ares_universe.py | ✓ Done | 141 symbols, 23h cache |
+| daily_recap.py | ✓ Done | Macro cards fixed session 8; Session 9: Gmail App Password moved off hardcode into `.env`/`os.getenv` |
+| evt_calibrator.py | ✓ Done | Audited session 9 — clean (fixed mega-cap bootstrap list, ~96% data coverage) |
+| ares_universe.py | ✓ Done | Session 9: migrated off Alpaca/IEX bars (was undercounting, 144 symbols) to shared `bars_fetch.py` (yfinance) |
+| bars_fetch.py | ✓ Done | NEW session 9 — shared yfinance OHLCV fetcher, consolidates 7 drifted copies |
+| ares_weights.py | ✓ Done | Audited session 9 — clean |
 | engine_a.py | ✓ LIVE | Market orders session 8 |
 | exit_monitor_a.py | ✓ Done | 6 exit conditions |
 | hold_monitor_a.py | ✓ Done | 5 layers + ADX slope penalty |
@@ -289,8 +303,8 @@ python ares_diagnose.py
 | hold_monitor_f.py | ✓ Done | 5-layer breakout health |
 | ares_exit_monitor.py | ✓ Done | yfinance bars fixed session 8 |
 | ares_hold_monitor.py | ✓ Done | A, B, C, E, F wired |
-| ares_watchdog.py | ✓ Done | Intraday hard stop + circuit breaker |
-| ares_diagnose.py | ✓ Done | System health diagnostic |
+| ares_watchdog.py | ✓ Done | Session 9: fixed `ledger.record_exit()` call args (2 sites) + print_status() ternary bug |
+| ares_diagnose.py | ✓ Done | Session 9: check_flags() now parses Kelly frac/mult from config text instead of hardcoding |
 | ares_reconcile.py | ✓ Done | NEW session 8 — daily data integrity |
 | ares_position_sync.py | ✓ Done | NEW session 8 — Alpaca vs ledger sync |
 | statistical_validation.py | ✓ Done | IC + FDR + Ledoit-Wolf |
@@ -359,7 +373,7 @@ Remove-Item -Recurse -Force __pycache__ -ErrorAction SilentlyContinue
 8. IC horizon is immutable once trades accumulate.
 9. No signals.py import in any engine file — ever.
 10. No FRED data in macro_context.py.
-11. Bar data fetch must use yfinance — never Alpaca IEX endpoint. This applies to engines AND ares_exit_monitor.py.
+11. Bar data fetch must use yfinance — never Alpaca IEX endpoint. This applies to engines, ares_exit_monitor.py, AND ares_universe.py (RF-37 pattern, fixed session 9). Use the shared `bars_fetch.py` module — do not write a new ad-hoc fetcher.
 12. All entry orders must use type=market — never DAY LIMIT (RF-36: limit orders caused ghost ledger entries and accidental shorts).
 13. TERMINAL_EXIT_PATHS in outcome_tracker.py must include all engine-specific exit labels. If a new exit reason is added to any engine, add it to TERMINAL_EXIT_PATHS in the same session.
 14. Run `ares_reconcile.py --alpaca` after any session that touches entry/exit logic.
