@@ -41,6 +41,7 @@ TERMINAL_EXIT_PATHS = {
     "hard_stop", "trail_stop", "time_stop", "target", "manual",
     "avwap_reached", "thesis_invalid", "measured_move",
     "sector_rotation", "trend_exhaustion", "rs_lost",
+    "exhausted_at_loss",  # Cross-engine hold-health override, added 2026-06-28
 }
 
 def load_json(path, default=None):

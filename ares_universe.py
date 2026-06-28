@@ -37,6 +37,7 @@ import numpy as np
 import pandas as pd
 import requests
 
+from bars_fetch import fetch_bars
 from ares_config import (
     ALPACA_API_KEY, ALPACA_SECRET_KEY, ALPACA_BASE_URL,
     UNIVERSE_PRICE_MIN, UNIVERSE_PRICE_MAX,
@@ -117,42 +118,32 @@ def get_tradeable_assets() -> List[str]:
 def screen_symbols(symbols: List[str]) -> List[str]:
     """
     Screen symbols using 20-day OHLCV bars. Returns passing symbols.
-    Fetches in batches of 200 (Alpaca limit).
-    """
-    end   = datetime.now()
-    start = end - timedelta(days=50)  # 50 calendar days → ~35 trading days
 
+    Uses the shared yfinance bar fetcher (bars_fetch.py) rather than
+    Alpaca's /v2/stocks/bars IEX feed — IEX covers only ~2-3% of
+    consolidated tape on paper accounts, which was silently dropping
+    60-80%+ of candidate symbols before they ever reached the filters
+    below (same failure mode as RF-37, fixed elsewhere on 2026-06-19
+    but never migrated in this file; confirmed in practice by universe.json
+    caching only 144 symbols despite filter thresholds that should pass
+    thousands of US equities).
+    """
     passing = []
     total   = len(symbols)
+    batch_size = 150
 
-    for i in range(0, total, 200):
-        batch = symbols[i:i+200]
-        params = {
-            "symbols":   ",".join(batch),
-            "timeframe": "1Day",
-            "start":     start.strftime("%Y-%m-%d"),
-            "end":       end.strftime("%Y-%m-%d"),
-            "limit":     10000,
-            "feed":      "iex",
-        }
+    for i in range(0, total, batch_size):
+        batch = symbols[i:i+batch_size]
         try:
-            resp = requests.get(
-                f"{ALPACA_DATA_URL}/v2/stocks/bars",
-                headers=_headers(), params=params, timeout=30
-            )
-            resp.raise_for_status()
-            data = resp.json().get("bars", {})
+            bars_by_symbol = fetch_bars(batch, lookback=20, min_bars=15, batch_size=batch_size)
         except Exception as e:
-            logger.warning("Bar fetch batch %d/%d failed: %s", i//200+1, (total+199)//200, e)
+            logger.warning("Bar fetch batch %d/%d failed: %s",
+                            i//batch_size+1, (total+batch_size-1)//batch_size, e)
             continue
 
-        for sym, bar_list in data.items():
-            if sym in HARD_EXCLUSIONS or not bar_list:
+        for sym, df in bars_by_symbol.items():
+            if sym in HARD_EXCLUSIONS or df is None or df.empty:
                 continue
-
-            df = pd.DataFrame(bar_list)
-            df.rename(columns={"o":"open","h":"high","l":"low","c":"close",
-                               "v":"volume","vw":"vwap"}, inplace=True)
 
             if len(df) < 15:
                 continue
@@ -185,7 +176,7 @@ def screen_symbols(symbols: List[str]) -> List[str]:
             passing.append(sym)
 
         logger.info("  Screened batch %d/%d → %d passing so far",
-                    i//200+1, (total+199)//200, len(passing))
+                    i//batch_size+1, (total+batch_size-1)//batch_size, len(passing))
         time.sleep(0.3)  # rate limit buffer
 
     return sorted(passing)

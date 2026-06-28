@@ -334,18 +334,31 @@ def check_flags():
             sym  = "✅" if mode == "live" else ("⚠️ " if mode == "shadow" else "🚫")
             print(f"    Engine {eng}: {sym}  {mode}")
 
-        # Bootstrap fraction
+        # Bootstrap fraction — parse actual values rather than hardcoding,
+        # so this stays correct after ares_config.py changes (e.g. post-calibration
+        # when KELLY_SHADOW_MULTIPLIER advances toward 1.0 per its own comment).
+        frac = None
+        mult = None
         for line in cfg_text.splitlines():
             if "KELLY_BOOTSTRAP_FRACTION" in line and "=" in line and "#" not in line.split("=")[0]:
                 print(f"\n  {line.strip()}")
+                try:
+                    frac = float(line.split("=")[1].split("#")[0].strip())
+                except Exception:
+                    pass
             if "KELLY_SHADOW_MULTIPLIER" in line and "=" in line and "#" not in line.split("=")[0]:
                 print(f"  {line.strip()}")
+                try:
+                    mult = float(line.split("=")[1].split("#")[0].strip())
+                except Exception:
+                    pass
 
-        frac = 0.025
-        mult = 0.50
-        effective_pct = frac * mult * 100
-        print(f"\n  Effective position size: {frac} × {mult} = {effective_pct:.2f}% of equity")
-        print(f"  At $50K: ${50000 * frac * mult:,.0f} per position")
+        if frac is not None and mult is not None:
+            effective_pct = frac * mult * 100
+            print(f"\n  Effective position size: {frac} × {mult} = {effective_pct:.2f}% of equity")
+            print(f"  At $50K: ${50000 * frac * mult:,.0f} per position")
+        else:
+            warn("Could not parse KELLY_BOOTSTRAP_FRACTION/KELLY_SHADOW_MULTIPLIER from ares_config.py")
 
     # Leveraged/inverse ETF issue (RF-20)
     universe_path = "universe.json"

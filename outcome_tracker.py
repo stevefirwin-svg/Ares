@@ -71,6 +71,7 @@ TERMINAL_EXIT_PATHS = {
     "sector_rotation",   # Engine E
     "trend_exhaustion",  # Engine A — momentum exhaustion terminal exit
     "rs_lost",           # Engine E — relative strength reversal terminal exit
+    "exhausted_at_loss", # Cross-engine hold-health override, added 2026-06-28
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

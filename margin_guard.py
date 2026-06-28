@@ -12,11 +12,11 @@ Two-level guard:
 
 Usage:
     from margin_guard import check_margin_safety, check_engine_budget
-from dotenv import load_dotenv
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
-    # Portfolio-level gate (run once per scan)
-    allowed, max_new, reason = check_margin_safety(dm)
+    # Portfolio-level gate (run once per scan, before any entries)
+    account   = get_account()        # raw Alpaca /v2/account JSON
+    positions = get_positions()      # raw Alpaca /v2/positions JSON (list)
+    allowed, max_new, reason = check_margin_safety(account, positions)
     if not allowed:
         return
 
@@ -26,10 +26,22 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
         continue
 
     python margin_guard.py   # standalone snapshot of all engines
+
+NOTE (2026-06-28): check_margin_safety() previously took a Raptor-style `dm`
+(DataManager) object with a `.alpaca.get_positions()` interface. None of the
+live Ares engines (engine_a.py..engine_f.py) use that interface — they all
+fetch account/positions via direct Alpaca REST calls — which is exactly why
+this guard was built but never actually wired into any live engine despite
+being marked "Done" in ARES_STARTUP.md. Signature changed to take plain
+`account` (dict) and `positions` (list) so every engine can call it directly.
 """
 
+import os
 import logging
 from typing import Tuple
+
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
 from ares_config import (
     INITIAL_ENGINE_WEIGHTS,
@@ -52,9 +64,13 @@ WARN_THRESHOLD   = 0.75
 _UNLIMITED = 10_000  # Sentinel for normal operation — explicit, not magic 99
 
 
-def check_margin_safety(dm) -> Tuple[bool, int, str]:
+def check_margin_safety(account: dict, positions: list) -> Tuple[bool, int, str]:
     """
     Portfolio-level margin and utilization check.
+
+    Args:
+        account   — raw Alpaca /v2/account JSON (dict)
+        positions — raw Alpaca /v2/positions JSON (list of dicts)
 
     Returns:
         allowed  (bool) — True if new entries are permitted
@@ -64,9 +80,6 @@ def check_margin_safety(dm) -> Tuple[bool, int, str]:
     Fail-safe: returns BLOCKED on any API error (fail closed, not open).
     """
     try:
-        account   = dm.alpaca.get_account()
-        positions = dm.alpaca.get_positions()
-
         equity = float(account.get("equity", 0))
         cash   = float(account.get("cash", 0))
 

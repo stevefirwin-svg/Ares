@@ -253,11 +253,15 @@ def run_check(dry_run: bool = False) -> dict:
                     if not dry_run:
                         try:
                             live_p = get_live_price(sym)
-                            ledger.record_exit(sym, exit_price=live_p or 0,
-                                               exit_date=datetime.now().strftime("%Y-%m-%d"),
-                                               reason="spy_circuit_breaker")
-                        except Exception:
-                            pass
+                            eid = ledger.get_symbol_owner(sym)
+                            if eid:
+                                ledger.record_exit(eid, sym, live_p or 0,
+                                                   datetime.now().strftime("%Y-%m-%d"),
+                                                   "spy_circuit_breaker")
+                            else:
+                                logger.warning("Ledger exit skipped for %s — no engine owner found in symbol_ownership.json", sym)
+                        except Exception as e:
+                            logger.warning("Ledger exit record failed for %s: %s", sym, e)
 
         logger.info("Circuit breaker exits: %d", len(summary["exits_triggered"]))
         return summary
@@ -333,10 +337,11 @@ def run_check(dry_run: bool = False) -> dict:
                 if not dry_run:
                     try:
                         ledger.record_exit(
+                            engine_id,
                             symbol,
-                            exit_price=live_price,
-                            exit_date=datetime.now().strftime("%Y-%m-%d"),
-                            reason=exit_reason
+                            live_price,
+                            datetime.now().strftime("%Y-%m-%d"),
+                            exit_reason
                         )
                     except Exception as e:
                         logger.warning("Ledger exit record failed for %s: %s", symbol, e)
@@ -385,10 +390,12 @@ def print_status():
                 pnl = 0.0
                 flag = "(no live price)"
 
+            live_str = f"${live_price:.2f}" if live_price else "N/A"
+            stop_str = f"{float(stop_price):.2f}" if stop_price else "N/A"
             print(f"  [{engine_id}] {sym:8s}  {shares} sh @ ${entry_price:.2f}"
-                  f"  live=${live_price:.2f}" if live_price else f"  live=N/A"
+                  f"  live={live_str}"
                   f"  pnl={pnl:+.2f}%"
-                  f"  stop={stop_price:.2f}" if stop_price else "  stop=N/A"
+                  f"  stop={stop_str}"
                   f"  {flag}")
 
     if not any_positions:

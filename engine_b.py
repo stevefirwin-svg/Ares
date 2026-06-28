@@ -74,6 +74,7 @@ from ares_config import (
     SHADOW_MIN_ENTRIES_FOR_LIVE, MAX_POSITIONS_PER_ENGINE,
 )
 from ledger import Ledger
+from margin_guard import check_margin_safety
 
 os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
@@ -110,63 +111,16 @@ def _save_json_atomic(path: str, data):
     os.replace(tmp, path)
 
 
+from bars_fetch import fetch_bars as _bars_fetch_shared
+
 def fetch_bars(symbols: List[str], lookback: int = BARS_LOOKBACK) -> Dict[str, pd.DataFrame]:
     """
     Fetch daily OHLCV bars via yfinance.
 
-    Replaces Alpaca/IEX bar endpoint which only covers ~2-3% of consolidated
-    tape on paper accounts, causing 60-80% of universe symbols to return no data.
-    yfinance covers all symbols with 5+ years of history at no cost.
-    Order submission remains on Alpaca (unaffected).
+    Thin wrapper around the shared implementation in bars_fetch.py
+    (consolidated 2026-06-28 — see that module's docstring for why).
     """
-    import yfinance as yf
-    from datetime import timedelta
-
-    end   = datetime.now()
-    start = end - timedelta(days=int(lookback * 1.6))
-    bars_out = {}
-
-    for i in range(0, len(symbols), 100):
-        batch = symbols[i:i+100]
-        try:
-            raw = yf.download(
-                tickers=batch,
-                start=start.strftime("%Y-%m-%d"),
-                end=end.strftime("%Y-%m-%d"),
-                interval="1d",
-                auto_adjust=True,
-                progress=False,
-                threads=True,
-            )
-            if raw.empty:
-                continue
-
-            if isinstance(raw.columns, pd.MultiIndex):
-                for sym in batch:
-                    try:
-                        df = raw.xs(sym, axis=1, level=1).copy()
-                        df.columns = [c.lower() for c in df.columns]
-                        df = df.dropna(subset=["close"])
-                        df["timestamp"] = df.index
-                        df = df.reset_index(drop=True).tail(lookback)
-                        if len(df) >= 30:
-                            bars_out[sym] = df
-                    except Exception:
-                        continue
-            else:
-                sym = batch[0]
-                df = raw.copy()
-                df.columns = [c.lower() for c in df.columns]
-                df = df.dropna(subset=["close"])
-                df["timestamp"] = df.index
-                df = df.reset_index(drop=True).tail(lookback)
-                if len(df) >= 30:
-                    bars_out[sym] = df
-
-        except Exception as e:
-            logger.warning("yfinance bar fetch failed (batch %d): %s", i // 100, e)
-
-    return bars_out
+    return _bars_fetch_shared(symbols, lookback=lookback, min_bars=30)
 
 
 def get_account() -> dict:
@@ -186,6 +140,17 @@ def get_buying_power() -> float:
         return float(acct.get("buying_power", 0))
     except Exception:
         return 0.0
+
+
+def get_positions() -> List[dict]:
+    import requests as req
+    headers = {
+        "APCA-API-KEY-ID":     ALPACA_API_KEY,
+        "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY,
+    }
+    resp = req.get(f"{ALPACA_BASE_URL}/v2/positions", headers=headers, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
 
 
 def submit_order(symbol: str, qty: int, client_order_id: str,
@@ -470,14 +435,31 @@ def get_macro_multiplier() -> Tuple[float, str]:
 def log_shadow(symbol: str, entry_price: float, engine_score: float,
                signals: dict, macro_regime: str, would_trade: bool,
                skip_reason: Optional[str] = None):
-    """Append one shadow classification record to shadow_classifications.json."""
+    """Append one shadow classification record to shadow_classifications.json.
+
+    Dedup guard: if engine B already logged this symbol today, skip to prevent
+    duplicate records when Task Scheduler fires the engine multiple times in one day.
+    """
     shadow_data = _load_json(SHADOW_FILE, {"_schema": {}, "classifications": []})
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # Dedup: skip if already logged same engine + symbol + date (non-UNC records only)
+    already = any(
+        c.get("engine_id") == ENGINE_ID
+        and c.get("symbol") == symbol
+        and c.get("date") == today
+        and "UNC" not in c.get("shadow_id", "")
+        for c in shadow_data.get("classifications", [])
+    )
+    if already:
+        logger.debug("DEDUP SKIP B | %s already logged today — not writing duplicate", symbol)
+        return
 
     record = {
         "shadow_id":         f"B-{symbol}-{datetime.now():%Y%m%d-%H%M%S}",
         "engine_id":         ENGINE_ID,
         "symbol":            symbol,
-        "date":              datetime.now().strftime("%Y-%m-%d"),
+        "date":              today,
         "scan_time":         datetime.now().strftime("%H:%M"),
         "entry_price":       round(entry_price, 4),
         "macro_regime":      macro_regime,
@@ -560,10 +542,20 @@ def scan(dry_run: bool = False) -> List[dict]:
     ownership = ledger._load_ownership()
 
     # Account state
+    margin_ok, margin_max_new, margin_reason = True, 10_000, "shadow mode — margin guard not enforced"
     try:
         acct = get_account()
         equity        = float(acct.get("equity", TOTAL_EQUITY))
         buying_power  = float(acct.get("buying_power", 0))
+        if status == "live":
+            try:
+                positions = get_positions()
+                margin_ok, margin_max_new, margin_reason = check_margin_safety(acct, positions)
+                logger.info("Margin guard: %s", margin_reason)
+            except Exception as mg_e:
+                margin_ok, margin_max_new = False, 0
+                margin_reason = f"margin guard check failed (fail closed): {mg_e}"
+                logger.error(margin_reason)
     except Exception as e:
         if status == "live":
             logger.error("Account fetch failed in LIVE mode: %s — aborting scan (no fabricated $)", e)
@@ -659,8 +651,11 @@ def scan(dry_run: bool = False) -> List[dict]:
             skip_reason = f"engine_capital_exhausted (remaining=${engine_remaining:.0f})"
 
         # ── Shadow log (always) ───────────────────────────────────────────────
+        # BUG FIX: previously used `would_trade and (status == "shadow")` which
+        # always wrote False once engine is live, silently losing all would_trade=True
+        # records and starving IC calibration of valid signal-outcome pairs.
         log_shadow(symbol, price, engine_score, signals, macro_regime,
-                   would_trade and (status == "shadow"),
+                   would_trade,
                    skip_reason=skip_reason)
 
         classified.append({
@@ -681,6 +676,13 @@ def scan(dry_run: bool = False) -> List[dict]:
         # ── Live entry ────────────────────────────────────────────────────────
         if status == "live" and would_trade and not dry_run:
             if entries_this_scan >= max_positions:
+                break
+
+            if not margin_ok:
+                logger.info("SKIP %s — margin guard active: %s", symbol, margin_reason)
+                continue
+            if entries_this_scan >= margin_max_new:
+                logger.info("Margin guard cap reached (%d new entries) — stopping entries this scan", margin_max_new)
                 break
 
             position_dollar, kelly_scale = compute_position_size(

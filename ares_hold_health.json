@@ -39,7 +39,7 @@
     },
     "scored_at": "2026-06-14T09:52:03.090166"
   },
-  "_last_run": "2026-06-19T09:59:25.257234",
+  "_last_run": "2026-06-28T09:52:03.596620",
   "ASTS": {
     "symbol": "ASTS",
     "engine_id": "B",
@@ -64,25 +64,25 @@
   "MRVL": {
     "symbol": "MRVL",
     "engine_id": "A",
-    "tier": "DECAYING",
-    "score": -0.2919,
-    "pnl_pct": 0.13,
-    "days_held": 0,
+    "tier": "EXHAUSTED",
+    "score": -0.488,
+    "pnl_pct": -14.41,
+    "days_held": 6,
     "hold_target": 15,
-    "price": 310.97,
-    "atr": 38.7571,
-    "adx": 585.02,
-    "adx_change": -29.53,
+    "price": 265.84,
+    "atr": 30.2121,
+    "adx": 483.39,
+    "adx_change": -72.36,
     "adx_penalty": 0.2,
-    "roc_accel": -0.556566,
+    "roc_accel": -0.444315,
     "layers": {
       "trend_cluster": 0.6,
       "price_momentum": 0.0067,
       "ma_stack": 1.0,
-      "volume_confirm": 0.4826,
-      "time_remaining": 1.0
+      "volume_confirm": 0.0955,
+      "time_remaining": 0.6
     },
-    "scored_at": "2026-06-19T09:59:24.834866"
+    "scored_at": "2026-06-28T09:52:03.168624"
   },
   "INTC": {
     "symbol": "INTC",
@@ -128,29 +128,29 @@
     "symbol": "CIFR",
     "engine_id": "E",
     "tier": "STRENGTHENING",
-    "score": 0.641,
-    "pnl_pct": 10.8,
-    "days_held": 1,
+    "score": 0.5511,
+    "pnl_pct": -8.07,
+    "days_held": 5,
     "hold_target": 20,
     "sector_etf": "XLK",
-    "rs_10d": 0.152,
-    "sec_rs_10d": 0.0041,
+    "rs_10d": 0.1568,
+    "sec_rs_10d": -0.0019,
     "layers": {
       "rs_vs_sector": 1.0,
-      "sector_rs_spy": 0.4021,
+      "sector_rs_spy": 0.3021,
       "price_trend": 1.0,
       "rs_acceleration": 0.75,
-      "time_decay": 0.95
+      "time_decay": 0.75
     },
-    "scored_at": "2026-06-19T09:59:25.257049"
+    "scored_at": "2026-06-28T09:52:03.596379"
   },
   "APLD": {
     "symbol": "APLD",
     "engine_id": "E",
     "tier": "STRENGTHENING",
-    "score": 0.641,
+    "score": 0.6211,
     "pnl_pct": 2.28,
-    "days_held": 1,
+    "days_held": 3,
     "hold_target": 20,
     "sector_etf": "XLK",
     "rs_10d": 0.0647,
@@ -160,31 +160,181 @@
       "sector_rs_spy": 0.4021,
       "price_trend": 1.0,
       "rs_acceleration": 0.75,
-      "time_decay": 0.95
+      "time_decay": 0.85
     },
-    "scored_at": "2026-06-19T09:59:25.256325"
+    "scored_at": "2026-06-21T15:58:03.599923"
   },
   "C": {
     "symbol": "C",
     "engine_id": "A",
     "tier": "STRENGTHENING",
-    "score": 0.3462,
-    "pnl_pct": 0.01,
-    "days_held": 0,
+    "score": 0.2003,
+    "pnl_pct": -0.89,
+    "days_held": 6,
     "hold_target": 13,
-    "price": 143.08,
-    "atr": 3.9318,
-    "adx": 479.41,
-    "adx_change": 90.22,
+    "price": 141.79,
+    "atr": 3.5568,
+    "adx": 544.01,
+    "adx_change": 19.79,
     "adx_penalty": 0.0,
-    "roc_accel": -0.110055,
+    "roc_accel": -0.146977,
     "layers": {
       "trend_cluster": 1.0,
       "price_momentum": 0.0067,
       "ma_stack": 1.0,
-      "volume_confirm": 0.4762,
+      "volume_confirm": 0.2975,
+      "time_remaining": 0.5385
+    },
+    "scored_at": "2026-06-28T09:52:03.165369"
+  },
+  "RIOT": {
+    "symbol": "RIOT",
+    "engine_id": "A",
+    "tier": "STRENGTHENING",
+    "score": 0.2263,
+    "pnl_pct": 0.02,
+    "days_held": 0,
+    "hold_target": 11,
+    "price": 28.105,
+    "atr": 2.0521,
+    "adx": 469.41,
+    "adx_change": 19.31,
+    "adx_penalty": 0.0,
+    "roc_accel": -0.112286,
+    "layers": {
+      "trend_cluster": 1.0,
+      "price_momentum": 0.0067,
+      "ma_stack": 1.0,
+      "volume_confirm": 0.0764,
       "time_remaining": 1.0
     },
-    "scored_at": "2026-06-19T09:59:24.832208"
+    "scored_at": "2026-06-21T15:58:03.250889"
+  },
+  "TSM": {
+    "symbol": "TSM",
+    "engine_id": "F",
+    "tier": "EXHAUSTED",
+    "score": -0.8381,
+    "pnl_pct": -8.16,
+    "days_held": 4,
+    "hold_target": 17,
+    "price": 424.41,
+    "atr": 19.1586,
+    "breakout_level": 449.1083,
+    "measured_target": 503.1916,
+    "progress_pct": -91.8,
+    "trimmed": false,
+    "layers": {
+      "measured_progress": 0.0,
+      "breakout_level_hold": 0.0705,
+      "volume_continuation": 0.0,
+      "price_momentum": 0.018,
+      "time_remaining": 0.7647
+    },
+    "scored_at": "2026-06-26T10:40:19.114357"
+  },
+  "CORZ": {
+    "symbol": "CORZ",
+    "engine_id": "E",
+    "tier": "STRENGTHENING",
+    "score": 0.6511,
+    "pnl_pct": 0.03,
+    "days_held": 0,
+    "hold_target": 20,
+    "sector_etf": "XLK",
+    "rs_10d": 0.0549,
+    "sec_rs_10d": 0.0041,
+    "layers": {
+      "rs_vs_sector": 1.0,
+      "sector_rs_spy": 0.4021,
+      "price_trend": 1.0,
+      "rs_acceleration": 0.75,
+      "time_decay": 1.0
+    },
+    "scored_at": "2026-06-21T15:58:03.600432"
+  },
+  "KVUE": {
+    "symbol": "KVUE",
+    "engine_id": "F",
+    "tier": "STRENGTHENING",
+    "score": 0.3354,
+    "pnl_pct": 1.7,
+    "days_held": 3,
+    "hold_target": 17,
+    "price": 19.12,
+    "atr": 0.3404,
+    "breakout_level": 18.53,
+    "measured_target": 20.395,
+    "progress_pct": 20.1,
+    "trimmed": false,
+    "layers": {
+      "measured_progress": 0.1338,
+      "breakout_level_hold": 0.9697,
+      "volume_continuation": 1.0,
+      "price_momentum": 0.9379,
+      "time_remaining": 0.8235
+    },
+    "scored_at": "2026-06-28T09:52:03.183938"
+  },
+  "GIS": {
+    "symbol": "GIS",
+    "engine_id": "C",
+    "tier": "STRENGTHENING",
+    "score": 0.5399,
+    "pnl_pct": 1.71,
+    "days_held": 2,
+    "max_hold": 8,
+    "price": 36.005,
+    "mom_now": 2.043625,
+    "layers": {
+      "momentum_strength": 1.0,
+      "price_direction": 0.4832,
+      "time_urgency": 0.75
+    },
+    "scored_at": "2026-06-28T09:52:03.201791"
+  },
+  "CVNA": {
+    "symbol": "CVNA",
+    "engine_id": "B",
+    "tier": "EXHAUSTED",
+    "score": -0.4761,
+    "pnl_pct": -0.02,
+    "days_held": 0,
+    "hold_target": 2,
+    "price": 62.34,
+    "avwap": 66.8438,
+    "atr": 4.2636,
+    "stoch_k": 4.03,
+    "layers": {
+      "avwap_proximity": 0.0,
+      "ou_reversion_speed": 0.5,
+      "volume_profile": 0.1848,
+      "stoch_exit_zone": 0.0,
+      "time_decay": 1.0
+    },
+    "scored_at": "2026-06-28T09:52:03.150791"
+  },
+  "KDP": {
+    "symbol": "KDP",
+    "engine_id": "F",
+    "tier": "STABLE",
+    "score": 0.0876,
+    "pnl_pct": -0.03,
+    "days_held": 0,
+    "hold_target": 17,
+    "price": 33.39,
+    "atr": 0.8014,
+    "breakout_level": 32.3496,
+    "measured_target": 35.239,
+    "progress_pct": -0.5,
+    "trimmed": false,
+    "layers": {
+      "measured_progress": 0.0,
+      "breakout_level_hold": 0.9306,
+      "volume_continuation": 0.5665,
+      "price_momentum": 0.982,
+      "time_remaining": 1.0
+    },
+    "scored_at": "2026-06-28T09:52:03.186333"
   }
 }

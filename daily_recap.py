@@ -34,7 +34,7 @@ from ares_config import (
     REALLOCATION_GATE_TRADES,
 )
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
 os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
@@ -48,7 +48,7 @@ logging.basicConfig(
 logger = logging.getLogger("ares.recap")
 
 EMAIL_SENDER   = "stevefirwin@gmail.com"
-EMAIL_PASSWORD = "trhy qqzo kylt jker"
+EMAIL_PASSWORD = os.getenv("ARES_RECAP_EMAIL_PASSWORD", "")
 EMAIL_RECEIVER = "stevefirwin@gmail.com"
 
 LEDGER_FILE   = "ares_position_ledger.json"
@@ -473,6 +473,11 @@ def build_html(account: dict, positions_live: list, ledger: dict,
 # ── Email ─────────────────────────────────────────────────────────────────────
 
 def send_email(html: str, today_pnl: float):
+    if not EMAIL_PASSWORD:
+        logger.error("ARES_RECAP_EMAIL_PASSWORD not set in .env — cannot send recap email.")
+        print("Email failed: ARES_RECAP_EMAIL_PASSWORD not set in .env")
+        return
+
     msg = MIMEMultipart()
     msg["From"]    = EMAIL_SENDER
     msg["To"]      = EMAIL_RECEIVER

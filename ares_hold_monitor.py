@@ -54,51 +54,17 @@ HEALTH_FILE = "ares_hold_health.json"
 
 # ── Bar fetch ─────────────────────────────────────────────────────────────────
 
+from bars_fetch import fetch_bars as _bars_fetch_shared
+
 def fetch_bars(symbols: List[str], lookback: int = BARS_LOOKBACK) -> Dict[str, pd.DataFrame]:
-    import requests as req
-    from datetime import timedelta
+    """
+    Fetch daily OHLCV bars via yfinance.
 
-    if not symbols:
-        return {}
-
-    from ares_config import ALPACA_API_KEY, ALPACA_SECRET_KEY
-    end   = datetime.now()
-    start = end - timedelta(days=int(lookback * 1.6))
-    headers = {
-        "APCA-API-KEY-ID":     ALPACA_API_KEY,
-        "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY,
-    }
-    bars_out = {}
-    for i in range(0, len(symbols), 200):
-        batch = symbols[i:i+200]
-        params = {
-            "symbols":   ",".join(batch),
-            "timeframe": "1Day",
-            "start":     start.strftime("%Y-%m-%d"),
-            "end":       end.strftime("%Y-%m-%d"),
-            "limit":     10000,
-            "feed":      "iex",
-        }
-        try:
-            resp = req.get(
-                "https://data.alpaca.markets/v2/stocks/bars",
-                headers=headers, params=params, timeout=30
-            )
-            resp.raise_for_status()
-            data = resp.json().get("bars", {})
-            for sym, bar_list in data.items():
-                if not bar_list:
-                    continue
-                df = pd.DataFrame(bar_list)
-                df.rename(columns={"o":"open","h":"high","l":"low","c":"close",
-                                   "v":"volume","vw":"vwap","t":"timestamp"}, inplace=True)
-                df["timestamp"] = pd.to_datetime(df["timestamp"])
-                df = df.sort_values("timestamp").tail(lookback)
-                if len(df) >= 5:
-                    bars_out[sym] = df
-        except Exception as e:
-            logger.warning("Bar fetch failed: %s", e)
-    return bars_out
+    Thin wrapper around the shared implementation in bars_fetch.py.
+    (This file's fetch_bars was on the old Alpaca/IEX endpoint until
+    2026-06-28 — see bars_fetch.py's docstring for the full story.)
+    """
+    return _bars_fetch_shared(symbols, lookback=lookback, min_bars=5)
 
 
 # ── Persistence ───────────────────────────────────────────────────────────────
